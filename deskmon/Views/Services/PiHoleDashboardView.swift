@@ -130,6 +130,10 @@ struct PiHoleDashboardView: View {
             do {
                 _ = try await serverManager.configureService(pluginId: "pihole", password: piholePassword)
                 piholePassword = ""
+                // Wait for the agent to collect Pi-hole stats with the new password,
+                // then refresh so the UI updates immediately instead of waiting for SSE.
+                try? await Task.sleep(for: .seconds(3))
+                await serverManager.refreshStats()
             } catch {
                 authError = error.localizedDescription
             }

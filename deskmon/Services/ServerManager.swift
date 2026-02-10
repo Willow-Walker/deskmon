@@ -71,20 +71,36 @@ final class ServerManager {
                 } catch {
                     Self.log.error("Fetch failed for \(server.name): \(error.localizedDescription)")
                     withAnimation { server.status = .offline }
+                    if serverID == selectedServerID { isConnected = false }
                     try? await Task.sleep(for: .seconds(backoff))
                     backoff = min(backoff * 2, 30)
                     continue
                 }
 
-                // Step 2: Open SSE stream for live updates
+                // Step 2: Open SSE stream with periodic fallback refresh
                 let stream = client.streamStats(
                     host: server.host, port: server.port, token: server.token
                 )
 
+                // Fallback: poll every 30s in case SSE silently stalls
+                let pollTask = Task {
+                    while !Task.isCancelled {
+                        try await Task.sleep(for: .seconds(30))
+                        guard !Task.isCancelled else { break }
+                        if let response = try? await client.fetchStats(
+                            host: server.host, port: server.port, token: server.token
+                        ) {
+                            applyFullSnapshot(server: server, response: response)
+                        }
+                    }
+                }
+
+                var receivedSSEEvent = false
                 do {
                     for try await event in stream {
                         guard !Task.isCancelled else { break }
 
+                        receivedSSEEvent = true
                         backoff = 2 // Reset backoff on successful event
 
                         switch event {
@@ -117,7 +133,13 @@ final class ServerManager {
                     Self.log.error("SSE stream error for \(server.name): \(error.localizedDescription)")
                 }
 
+                pollTask.cancel()
+
                 guard !Task.isCancelled else { break }
+
+                if !receivedSSEEvent {
+                    Self.log.warning("SSE stream for \(server.name) closed without delivering any events")
+                }
 
                 // Mark disconnected, wait, then retry
                 withAnimation { server.status = .offline }
@@ -217,6 +239,19 @@ final class ServerManager {
             pluginId: pluginId,
             password: password
         )
+    }
+
+    /// Manually fetch latest stats for the selected server (used after actions that change agent state).
+    func refreshStats() async {
+        guard let server = selectedServer else { return }
+        do {
+            let response = try await client.fetchStats(
+                host: server.host, port: server.port, token: server.token
+            )
+            applyFullSnapshot(server: server, response: response)
+        } catch {
+            Self.log.error("Manual refresh failed for \(server.name): \(error.localizedDescription)")
+        }
     }
 
     func restartAgent() async throws -> String {
