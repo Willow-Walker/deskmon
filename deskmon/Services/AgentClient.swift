@@ -49,6 +49,22 @@ enum ConnectionResult: Sendable {
     case error(String)
 }
 
+// MARK: - SSE Events
+
+/// Decoded event from the SSE stream.
+enum ServerEvent: Sendable {
+    case system(ServerStats, [ProcessInfo])
+    case docker([DockerContainer])
+    case services([ServiceInfo])
+    case keepalive
+}
+
+/// Matches the "system" SSE event payload from the agent.
+private struct SystemEventPayload: Codable, Sendable {
+    let system: ServerStats
+    let processes: [ProcessInfo]
+}
+
 // MARK: - Client
 
 final class AgentClient: Sendable {
@@ -232,6 +248,104 @@ final class AgentClient: Sendable {
 
         let decoded = try JSONDecoder().decode(ControlResponse.self, from: data)
         return decoded.message ?? "restarting"
+    }
+
+    // MARK: - SSE Streaming
+
+    /// Opens a persistent SSE connection to GET /stats/stream and yields decoded events.
+    func streamStats(host: String, port: Int, token: String) -> AsyncThrowingStream<ServerEvent, Error> {
+        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                guard let url = URL(string: "http://\(trimmedHost):\(port)/stats/stream") else {
+                    continuation.finish(throwing: AgentError.invalidURL)
+                    return
+                }
+
+                var request = URLRequest(url: url)
+                if !trimmedToken.isEmpty {
+                    request.setValue("Bearer \(trimmedToken)", forHTTPHeaderField: "Authorization")
+                }
+                // No timeout — SSE is a long-lived connection
+                request.timeoutInterval = 0
+
+                Self.log.info("SSE connecting to \(url.absoluteString)")
+
+                do {
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+
+                    guard let http = response as? HTTPURLResponse else {
+                        continuation.finish(throwing: AgentError.httpError(0))
+                        return
+                    }
+
+                    if http.statusCode == 401 {
+                        continuation.finish(throwing: AgentError.unauthorized)
+                        return
+                    }
+
+                    guard http.statusCode == 200 else {
+                        continuation.finish(throwing: AgentError.httpError(http.statusCode))
+                        return
+                    }
+
+                    Self.log.info("SSE stream connected")
+
+                    var currentEvent = ""
+                    var dataBuffer = ""
+
+                    for try await line in bytes.lines {
+                        if Task.isCancelled { break }
+
+                        if line.hasPrefix("event: ") {
+                            currentEvent = String(line.dropFirst(7))
+                        } else if line.hasPrefix("data: ") {
+                            dataBuffer = String(line.dropFirst(6))
+                        } else if line.hasPrefix(":") {
+                            // Comment line (keepalive)
+                            continuation.yield(.keepalive)
+                        } else if line.isEmpty && !currentEvent.isEmpty {
+                            // Empty line = end of event
+                            if let event = Self.decodeSSEEvent(type: currentEvent, data: dataBuffer) {
+                                continuation.yield(event)
+                            }
+                            currentEvent = ""
+                            dataBuffer = ""
+                        }
+                    }
+
+                    continuation.finish()
+                } catch {
+                    Self.log.error("SSE stream error: \(error.localizedDescription)")
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+
+    private static func decodeSSEEvent(type: String, data: String) -> ServerEvent? {
+        guard let jsonData = data.data(using: .utf8) else { return nil }
+        let decoder = JSONDecoder()
+
+        switch type {
+        case "system":
+            guard let payload = try? decoder.decode(SystemEventPayload.self, from: jsonData) else { return nil }
+            return .system(payload.system, payload.processes)
+        case "docker":
+            guard let containers = try? decoder.decode([DockerContainer].self, from: jsonData) else { return nil }
+            return .docker(containers)
+        case "services":
+            guard let services = try? decoder.decode([ServiceInfo].self, from: jsonData) else { return nil }
+            return .services(services)
+        default:
+            return nil
+        }
     }
 
     /// Lightweight health check — returns true if agent responds 200.

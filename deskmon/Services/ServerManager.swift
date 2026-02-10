@@ -6,15 +6,10 @@ import SwiftUI
 final class ServerManager {
     var servers: [ServerInfo] = []
     var selectedServerID: UUID?
-    var isPolling = false
-    var pollingInterval: TimeInterval = 3
-
-    static let intervalOptions: [(label: String, value: TimeInterval)] = [
-        ("1s", 1), ("3s", 3), ("5s", 5), ("10s", 10), ("30s", 30), ("60s", 60)
-    ]
+    var isConnected = false
 
     private let client = AgentClient.shared
-    private var pollingTask: Task<Void, Never>?
+    private var streamTasks: [UUID: Task<Void, Never>] = [:]
 
     var selectedServer: ServerInfo? {
         servers.first { $0.id == selectedServerID }
@@ -24,10 +19,6 @@ final class ServerManager {
         selectedServer?.status ?? .offline
     }
 
-    init() {
-        startPolling()
-    }
-
     // MARK: - Connection Verification
 
     /// Two-step handshake used by AddServerSheet / EditServerSheet before saving.
@@ -35,80 +26,116 @@ final class ServerManager {
         await client.verifyConnection(host: host, port: port, token: token)
     }
 
-    // MARK: - Polling
+    // MARK: - SSE Streaming
 
-    func startPolling() {
-        guard !isPolling else { return }
-        isPolling = true
-        pollingTask = Task { [weak self] in
-            var lastPoll = ContinuousClock.Instant.now - .seconds(999)
+    /// Starts an SSE stream for every server that doesn't already have one.
+    func startStreaming() {
+        for server in servers {
+            guard streamTasks[server.id] == nil else { continue }
+            startStream(for: server)
+        }
+    }
+
+    /// Stops all SSE streams.
+    func stopStreaming() {
+        for (_, task) in streamTasks {
+            task.cancel()
+        }
+        streamTasks.removeAll()
+        isConnected = false
+    }
+
+    /// Starts (or restarts) the SSE stream for a single server.
+    private func startStream(for server: ServerInfo) {
+        streamTasks[server.id]?.cancel()
+
+        streamTasks[server.id] = Task {
+            let serverID = server.id
+            var backoff: UInt64 = 2
+
             while !Task.isCancelled {
-                guard let self else { break }
-                let elapsed = ContinuousClock.now - lastPoll
-                if elapsed >= .seconds(self.pollingInterval) {
-                    lastPoll = ContinuousClock.now
-                    await self.refreshData()
-                }
+                // Step 1: Fetch full snapshot to fill UI immediately
                 do {
-                    try await Task.sleep(for: .milliseconds(500))
+                    let response = try await client.fetchStats(
+                        host: server.host, port: server.port, token: server.token
+                    )
+                    applyFullSnapshot(server: server, response: response)
+                } catch let error as AgentError where error == .unauthorized {
+                    withAnimation { server.status = .unauthorized }
+                    try? await Task.sleep(for: .seconds(backoff))
+                    backoff = min(backoff * 2, 30)
+                    continue
                 } catch {
-                    break
+                    withAnimation { server.status = .offline }
+                    try? await Task.sleep(for: .seconds(backoff))
+                    backoff = min(backoff * 2, 30)
+                    continue
                 }
+
+                // Step 2: Open SSE stream for live updates
+                let stream = client.streamStats(
+                    host: server.host, port: server.port, token: server.token
+                )
+
+                do {
+                    for try await event in stream {
+                        guard !Task.isCancelled else { break }
+
+                        backoff = 2 // Reset backoff on successful event
+
+                        switch event {
+                        case .system(let stats, let processes):
+                            withAnimation(.easeInOut(duration: 0.4)) {
+                                server.stats = stats
+                                server.processes = processes
+                                server.appendNetworkSample(stats.network)
+                                server.status = Self.deriveStatus(from: stats)
+                            }
+                            if serverID == selectedServerID {
+                                isConnected = true
+                            }
+
+                        case .docker(let containers):
+                            withAnimation(.easeInOut(duration: 0.5)) {
+                                server.containers = containers
+                            }
+
+                        case .services(let services):
+                            withAnimation(.easeInOut(duration: 0.5)) {
+                                server.services = services
+                            }
+
+                        case .keepalive:
+                            break
+                        }
+                    }
+                } catch {
+                    // Stream ended or errored — will reconnect
+                }
+
+                guard !Task.isCancelled else { break }
+
+                // Mark disconnected, wait, then retry
+                withAnimation { server.status = .offline }
+                if serverID == selectedServerID {
+                    isConnected = false
+                }
+
+                try? await Task.sleep(for: .seconds(backoff))
+                backoff = min(backoff * 2, 30)
             }
         }
     }
 
-    func stopPolling() {
-        isPolling = false
-        pollingTask?.cancel()
-        pollingTask = nil
-    }
-
-    // MARK: - Data Fetching
-
-    /// Polls each server with a single GET /stats request.
-    /// Uses fetchStats directly — no health check per cycle.
-    func refreshData() async {
-        guard !servers.isEmpty else { return }
-
-        let connections = servers.map { server in
-            (id: server.id, host: server.host, port: server.port, token: server.token)
-        }
-
-        await withTaskGroup(of: (UUID, FetchResult).self) { group in
-            for conn in connections {
-                group.addTask { [client] in
-                    do {
-                        let response = try await client.fetchStats(
-                            host: conn.host, port: conn.port, token: conn.token
-                        )
-                        return (conn.id, .success(response))
-                    } catch let error as AgentError where error == .unauthorized {
-                        return (conn.id, .unauthorized)
-                    } catch {
-                        return (conn.id, .offline)
-                    }
-                }
-            }
-
-            for await (id, result) in group {
-                guard let server = servers.first(where: { $0.id == id }) else { continue }
-                withAnimation(.easeInOut(duration: 0.5)) {
-                    switch result {
-                    case .success(let response):
-                        server.stats = response.system
-                        server.containers = response.containers
-                        server.processes = response.processes ?? []
-                        server.services = response.services ?? []
-                        server.appendNetworkSample(response.system.network)
-                        server.status = Self.deriveStatus(from: response.system)
-                    case .unauthorized:
-                        server.status = .unauthorized
-                    case .offline:
-                        server.status = .offline
-                    }
-                }
-            }
+    /// Applies a full GET /stats response to the server (used on connect/reconnect).
+    private func applyFullSnapshot(server: ServerInfo, response: AgentStatsResponse) {
+        withAnimation(.easeInOut(duration: 0.5)) {
+            server.stats = response.system
+            server.containers = response.containers
+            server.processes = response.processes ?? []
+            server.services = response.services ?? []
+            server.appendNetworkSample(response.system.network)
+            server.status = Self.deriveStatus(from: response.system)
         }
     }
 
@@ -120,6 +147,7 @@ final class ServerManager {
         if selectedServerID == nil {
             selectedServerID = server.id
         }
+        startStream(for: server)
     }
 
     func updateServer(id: UUID, name: String, host: String, port: Int, token: String) {
@@ -128,9 +156,13 @@ final class ServerManager {
         server.host = host
         server.port = port
         server.token = token
+        // Restart stream with new credentials
+        startStream(for: server)
     }
 
     func deleteServer(_ server: ServerInfo) {
+        streamTasks[server.id]?.cancel()
+        streamTasks.removeValue(forKey: server.id)
         servers.removeAll { $0.id == server.id }
         if selectedServerID == server.id {
             selectedServerID = servers.first?.id
@@ -139,6 +171,8 @@ final class ServerManager {
 
     func selectServer(_ server: ServerInfo) {
         selectedServerID = server.id
+        // Update connection status based on selected server
+        isConnected = server.status != .offline && server.status != .unauthorized
     }
 
     // MARK: - Container Actions
@@ -152,22 +186,19 @@ final class ServerManager {
             containerID: containerID,
             action: action
         )
-        // Give Docker time to settle after the action before refreshing stats
-        try? await Task.sleep(for: .seconds(1.5))
-        await refreshData()
+        // Docker stats will update via the SSE stream automatically
         return result
     }
 
     func killProcess(pid: Int32) async throws -> String {
         guard let server = selectedServer else { throw AgentError.invalidURL }
-        let result = try await client.killProcess(
+        return try await client.killProcess(
             host: server.host,
             port: server.port,
             token: server.token,
             pid: pid
         )
-        await refreshData()
-        return result
+        // Process list will update via the SSE stream automatically
     }
 
     func restartAgent() async throws -> String {
@@ -189,12 +220,4 @@ final class ServerManager {
         }
         return .healthy
     }
-}
-
-// MARK: - Fetch Result (internal to polling)
-
-private enum FetchResult: Sendable {
-    case success(AgentStatsResponse)
-    case unauthorized
-    case offline
 }

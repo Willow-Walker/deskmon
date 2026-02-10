@@ -28,7 +28,7 @@ struct FooterView: View {
             .buttonStyle(.dark)
 
             Button {
-                serverManager.stopPolling()
+                serverManager.stopStreaming()
                 NSApplication.shared.terminate(nil)
             } label: {
                 Image(systemName: "power")

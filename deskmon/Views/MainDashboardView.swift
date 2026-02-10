@@ -18,8 +18,6 @@ struct MainDashboardView: View {
     }
 
     var body: some View {
-        @Bindable var manager = serverManager
-
         HStack(spacing: 0) {
             // Sidebar
             VStack(spacing: 0) {
@@ -44,7 +42,7 @@ struct MainDashboardView: View {
                             sidebarRow(server: server, isSelected: server.id == serverManager.selectedServerID)
                                 .onTapGesture {
                                     withAnimation(.smooth(duration: 0.25)) {
-                                        manager.selectedServerID = server.id
+                                        serverManager.selectedServerID = server.id
                                         selectedContainer = nil
                                         selectedProcess = nil
                                         selectedService = nil
@@ -424,9 +422,7 @@ struct MainDashboardView: View {
     // MARK: - Settings Popover
 
     private var settingsPopover: some View {
-        @Bindable var manager = serverManager
-
-        return VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Settings")
                 .font(.headline)
 
@@ -452,24 +448,19 @@ struct MainDashboardView: View {
             SectionHeaderView(title: "Agent")
 
             VStack(spacing: 10) {
-                Toggle("Polling", isOn: Binding(
-                    get: { serverManager.isPolling },
-                    set: { newValue in
-                        if newValue { serverManager.startPolling() }
-                        else { serverManager.stopPolling() }
-                    }
-                ))
-                .toggleStyle(.switch)
-                .tint(Theme.accent)
-                .font(.callout)
-
-                Picker("Refresh Interval", selection: $manager.pollingInterval) {
-                    ForEach(ServerManager.intervalOptions, id: \.value) { option in
-                        Text(option.label).tag(option.value)
+                HStack {
+                    Text("Connection")
+                        .font(.callout)
+                    Spacer()
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(serverManager.isConnected ? Theme.healthy : Theme.warning)
+                            .frame(width: 8, height: 8)
+                        Text(serverManager.isConnected ? "Live" : "Reconnecting...")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .pickerStyle(.menu)
-                .font(.callout)
 
                 HStack(spacing: 8) {
                     Button {

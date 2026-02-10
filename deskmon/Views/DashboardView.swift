@@ -27,8 +27,6 @@ struct DashboardView: View {
     @State private var editError: String?
 
     var body: some View {
-        @Bindable var manager = serverManager
-
         VStack(spacing: 0) {
             if let container = liveSelectedContainer {
                 containerDetailPanel(container: container)
@@ -62,7 +60,7 @@ struct DashboardView: View {
                         removal: .move(edge: .trailing)
                     ))
             } else {
-                dashboardContent(manager: manager)
+                dashboardContent(manager: serverManager)
                     .transition(.asymmetric(
                         insertion: .move(edge: .leading),
                         removal: .move(edge: .leading)
@@ -257,28 +255,17 @@ struct DashboardView: View {
 
                     VStack(spacing: 0) {
                         groupedRow {
-                            Toggle("Polling", isOn: Binding(
-                                get: { serverManager.isPolling },
-                                set: { newValue in
-                                    if newValue { serverManager.startPolling() }
-                                    else { serverManager.stopPolling() }
-                                }
-                            ))
-                            .toggleStyle(.switch)
-                            .tint(Theme.accent)
-                        }
-
-                        Divider().padding(.leading, 12)
-
-                        groupedRow {
-                            @Bindable var manager = serverManager
-                            Picker("Refresh", selection: $manager.pollingInterval) {
-                                ForEach(ServerManager.intervalOptions, id: \.value) { option in
-                                    Text(option.label).tag(option.value)
+                            HStack {
+                                Text("Connection")
+                                Spacer()
+                                HStack(spacing: 6) {
+                                    Circle()
+                                        .fill(serverManager.isConnected ? Theme.healthy : Theme.warning)
+                                        .frame(width: 8, height: 8)
+                                    Text(serverManager.isConnected ? "Live" : "Reconnecting...")
+                                        .foregroundStyle(.secondary)
                                 }
                             }
-                            .pickerStyle(.menu)
-                            .tint(.secondary)
                         }
 
                         Divider().padding(.leading, 12)

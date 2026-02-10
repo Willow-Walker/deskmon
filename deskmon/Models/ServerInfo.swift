@@ -20,7 +20,7 @@ final class ServerInfo: Identifiable {
     var services: [ServiceInfo] = []
     var networkHistory: [NetworkSample] = []
 
-    static let maxNetworkSamples = 40
+    static let maxNetworkSamples = 60
 
     init(id: UUID = UUID(), name: String, host: String, port: Int = 7654, token: String = "") {
         self.id = id
