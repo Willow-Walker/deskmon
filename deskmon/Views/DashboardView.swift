@@ -7,8 +7,15 @@ struct DashboardView: View {
     @State private var editingServer: ServerInfo?
     @State private var selectedContainer: DockerContainer?
     @State private var selectedProcess: ProcessInfo?
+    @State private var activeTab: DashboardTab = .overview
+    @State private var selectedService: ServiceInfo?
 
     @State private var isRestartingAgent = false
+
+    enum DashboardTab: String, CaseIterable {
+        case overview = "Overview"
+        case services = "Services"
+    }
     @State private var restartFeedback: String?
 
     // Inline edit form state
@@ -31,6 +38,13 @@ struct DashboardView: View {
                     ))
             } else if let process = liveSelectedProcess {
                 processDetailPanel(process: process)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing),
+                        removal: .move(edge: .trailing)
+                    ))
+            } else if let service = selectedService,
+                      let live = serverManager.selectedServer?.services.first(where: { $0.id == service.id }) ?? Optional(service) {
+                serviceDetailPanel(service: live)
                     .transition(.asymmetric(
                         insertion: .move(edge: .trailing),
                         removal: .move(edge: .trailing)
@@ -84,39 +98,64 @@ struct DashboardView: View {
             }
 
             if let server = serverManager.selectedServer {
-                ScrollView {
-                    VStack(spacing: 10) {
-                        ServerHeaderView(server: server)
+                // Tab picker
+                Picker("", selection: $activeTab) {
+                    ForEach(DashboardTab.allCases, id: \.self) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
+                .padding(.bottom, 2)
 
-                        if let stats = server.stats {
-                            SystemStatsView(stats: stats)
-                            NetworkStatsView(network: stats.network, history: server.networkHistory)
-                        }
+                switch activeTab {
+                case .overview:
+                    ScrollView {
+                        VStack(spacing: 10) {
+                            ServerHeaderView(server: server)
 
-                        if !server.containers.isEmpty {
-                            ContainerListView(containers: server.containers) { container in
-                                withAnimation(.smooth(duration: 0.3)) {
-                                    selectedProcess = nil
-                                    selectedContainer = container
-                                }
+                            if let stats = server.stats {
+                                SystemStatsView(stats: stats)
+                                NetworkStatsView(network: stats.network, history: server.networkHistory)
                             }
-                        }
 
-                        if !server.processes.isEmpty {
-                            ProcessListView(
-                                processes: server.processes,
-                                onSelect: { process in
+                            if !server.containers.isEmpty {
+                                ContainerListView(containers: server.containers) { container in
                                     withAnimation(.smooth(duration: 0.3)) {
-                                        selectedContainer = nil
-                                        selectedProcess = process
+                                        selectedProcess = nil
+                                        selectedContainer = container
                                     }
                                 }
-                            )
+                            }
+
+                            if !server.processes.isEmpty {
+                                ProcessListView(
+                                    processes: server.processes,
+                                    onSelect: { process in
+                                        withAnimation(.smooth(duration: 0.3)) {
+                                            selectedContainer = nil
+                                            selectedProcess = process
+                                        }
+                                    }
+                                )
+                            }
                         }
+                        .padding(12)
                     }
-                    .padding(12)
+                    .animation(.smooth, value: serverManager.selectedServerID)
+
+                case .services:
+                    ScrollView {
+                        ServicesGridView(services: server.services) { service in
+                            withAnimation(.smooth(duration: 0.3)) {
+                                selectedService = service
+                            }
+                        }
+                        .padding(12)
+                    }
                 }
-                .animation(.smooth, value: serverManager.selectedServerID)
 
                 FooterView(
                     onAddServer: { showingAddServer = true },
@@ -539,6 +578,43 @@ struct DashboardView: View {
             .padding(.vertical, 12)
 
             ContainerDetailView(container: container)
+        }
+    }
+
+    // MARK: - Service Detail Panel
+
+    private func serviceDetailPanel(service: ServiceInfo) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Button {
+                    withAnimation(.smooth(duration: 0.3)) {
+                        selectedService = nil
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Services")
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Text(service.name)
+                    .font(.headline)
+
+                Spacer()
+
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                    Text("Services")
+                }
+                .hidden()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+
+            ServiceDashboardView(service: service)
         }
     }
 

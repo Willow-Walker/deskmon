@@ -17,6 +17,7 @@ final class ServerInfo: Identifiable {
     var stats: ServerStats? = nil
     var containers: [DockerContainer] = []
     var processes: [ProcessInfo] = []
+    var services: [ServiceInfo] = []
     var networkHistory: [NetworkSample] = []
 
     static let maxNetworkSamples = 40

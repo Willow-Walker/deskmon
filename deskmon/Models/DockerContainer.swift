@@ -107,10 +107,10 @@ extension DockerContainer: Codable {
         cpuPercent = try c.decode(Double.self, forKey: .cpuPercent)
         memoryUsageMB = try c.decode(Double.self, forKey: .memoryUsageMB)
         memoryLimitMB = try c.decode(Double.self, forKey: .memoryLimitMB)
-        networkRxBytes = try c.decode(Int64.self, forKey: .networkRxBytes)
-        networkTxBytes = try c.decode(Int64.self, forKey: .networkTxBytes)
-        blockReadBytes = try c.decode(Int64.self, forKey: .blockReadBytes)
-        blockWriteBytes = try c.decode(Int64.self, forKey: .blockWriteBytes)
+        networkRxBytes = Self.safeInt64(from: c, forKey: .networkRxBytes)
+        networkTxBytes = Self.safeInt64(from: c, forKey: .networkTxBytes)
+        blockReadBytes = Self.safeInt64(from: c, forKey: .blockReadBytes)
+        blockWriteBytes = Self.safeInt64(from: c, forKey: .blockWriteBytes)
         pids = try c.decode(Int.self, forKey: .pids)
 
         // Agent sends ISO 8601 string, empty string, or null
@@ -149,5 +149,17 @@ extension DockerContainer: Codable {
         try c.encode(ports, forKey: .ports)
         try c.encode(restartCount, forKey: .restartCount)
         try c.encode(healthStatus.rawValue, forKey: .healthStatus)
+    }
+
+    /// Safely decode a byte count the Go agent sends as uint64.
+    /// Foundation's JSONDecoder traps on Int64(Double) overflow, so we
+    /// decode as Double first and clamp to Int64 range.
+    private static func safeInt64(from c: KeyedDecodingContainer<CodingKeys>, forKey key: CodingKeys) -> Int64 {
+        if let d = try? c.decode(Double.self, forKey: key), d.isFinite {
+            if d >= Double(Int64.max) { return Int64.max }
+            if d <= 0 { return 0 }
+            return Int64(d)
+        }
+        return 0
     }
 }

@@ -8,6 +8,7 @@ struct AgentStatsResponse: Codable, Sendable {
     let system: ServerStats
     let containers: [DockerContainer]
     let processes: [ProcessInfo]?
+    let services: [ServiceInfo]?
 }
 
 // MARK: - Container Actions

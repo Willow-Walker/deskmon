@@ -7,8 +7,15 @@ struct MainDashboardView: View {
     @State private var editingServer: ServerInfo?
     @State private var selectedContainer: DockerContainer?
     @State private var selectedProcess: ProcessInfo?
+    @State private var activeTab: DashboardTab = .overview
+    @State private var selectedService: ServiceInfo?
     @State private var isRestartingAgent = false
     @State private var restartFeedback: String?
+
+    enum DashboardTab: String, CaseIterable {
+        case overview = "Overview"
+        case services = "Services"
+    }
 
     var body: some View {
         @Bindable var manager = serverManager
@@ -40,6 +47,7 @@ struct MainDashboardView: View {
                                         manager.selectedServerID = server.id
                                         selectedContainer = nil
                                         selectedProcess = nil
+                                        selectedService = nil
                                     }
                                 }
                         }
@@ -73,8 +81,30 @@ struct MainDashboardView: View {
             // Detail — OLED black with inner rounded border
             VStack(spacing: 0) {
                 if let server = serverManager.selectedServer {
-                    detailContent(server: server)
-                        .animation(.smooth, value: serverManager.selectedServerID)
+                    // Tab picker
+                    HStack {
+                        Picker("", selection: $activeTab) {
+                            ForEach(DashboardTab.allCases, id: \.self) { tab in
+                                Text(tab.rawValue).tag(tab)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 200)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 14)
+                    .padding(.bottom, 4)
+
+                    // Tab content
+                    switch activeTab {
+                    case .overview:
+                        detailContent(server: server)
+                            .animation(.smooth, value: serverManager.selectedServerID)
+                    case .services:
+                        servicesContent(server: server)
+                    }
                 } else {
                     Spacer()
                     VStack(spacing: 12) {
@@ -293,6 +323,54 @@ struct MainDashboardView: View {
             }
         } else {
             ProgressView("Connecting...")
+        }
+    }
+
+    // MARK: - Services Content
+
+    @ViewBuilder
+    private func servicesContent(server: ServerInfo) -> some View {
+        if let service = selectedService,
+           let live = server.services.first(where: { $0.id == service.id }) ?? Optional(service) {
+            VStack(spacing: 0) {
+                HStack {
+                    Button {
+                        withAnimation(.smooth(duration: 0.25)) {
+                            selectedService = nil
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                            Text("Services")
+                        }
+                        .font(.callout)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+
+                ServiceDashboardView(service: live)
+            }
+            .transition(.asymmetric(
+                insertion: .move(edge: .trailing),
+                removal: .move(edge: .trailing)
+            ))
+        } else {
+            ScrollView {
+                ServicesGridView(services: server.services) { service in
+                    withAnimation(.smooth(duration: 0.25)) {
+                        selectedService = service
+                    }
+                }
+                .padding(20)
+            }
+            .transition(.asymmetric(
+                insertion: .move(edge: .leading),
+                removal: .move(edge: .leading)
+            ))
         }
     }
 

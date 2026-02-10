@@ -106,6 +106,7 @@ final class ServerManager {
                         server.stats = response.system
                         server.containers = response.containers
                         server.processes = response.processes ?? []
+                        server.services = response.services ?? []
                         server.appendNetworkSample(response.system.network)
                         server.status = Self.deriveStatus(from: response.system)
                     case .unauthorized:
