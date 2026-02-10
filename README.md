@@ -12,7 +12,7 @@ A lightweight, privacy-first server monitoring tool designed for homelab enthusi
 
 ---
 
-## 🎯 Vision
+## Vision
 
 **The problem:** You run a home server (pihole, file storage, Plex, docker containers). Checking on it means SSH-ing in, opening a browser to various dashboards, or setting up heavyweight solutions like Grafana + Prometheus.
 
@@ -20,7 +20,7 @@ A lightweight, privacy-first server monitoring tool designed for homelab enthusi
 
 ---
 
-## 👥 Target Audience
+## Target Audience
 
 - **Homelab enthusiasts** running personal servers
 - **Developers** with local dev servers or VMs
@@ -34,7 +34,7 @@ A lightweight, privacy-first server monitoring tool designed for homelab enthusi
 
 ---
 
-## ✨ Core Features
+## Core Features
 
 ### Menu Bar App (macOS)
 
@@ -54,7 +54,7 @@ A lightweight, privacy-first server monitoring tool designed for homelab enthusi
 
 ---
 
-## 📊 Stats & Metrics
+## Stats & Metrics
 
 ### System (Always Available)
 
@@ -93,7 +93,7 @@ A lightweight, privacy-first server monitoring tool designed for homelab enthusi
 
 ---
 
-## 🎨 Design Philosophy
+## Design Philosophy
 
 ### Native First
 Built with Swift and SwiftUI. Feels like a first-party Apple app. Follows macOS design conventions. Plays nice with system dark mode, accent colors, and accessibility features.
@@ -111,7 +111,7 @@ Built with Swift and SwiftUI. Feels like a first-party Apple app. Follows macOS 
 
 ---
 
-## 💰 Pricing Model
+## Pricing Model
 
 ### Free Tier
 - 1 server
@@ -129,7 +129,7 @@ Built with Swift and SwiftUI. Feels like a first-party Apple app. Follows macOS 
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -167,11 +167,11 @@ GET /stats/pihole    → Pihole integration stats
 
 ---
 
-## 📱 UI Mockup
+## UI Mockup
 
 ```
 ┌──────────────────────────────────────┐
-│ 🟢 prowl-server               12d ▲ │
+│ prowl-server               12d  │
 ├──────────────────────────────────────┤
 │                                      │
 │  CPU   ████████░░░░░░░░  48%        │
@@ -180,7 +180,7 @@ GET /stats/pihole    → Pihole integration stats
 │  Net   ↓ 12.4 MB/s   ↑ 1.2 MB/s    │
 │                                      │
 ├──────────────────────────────────────┤
-│  🐳 Containers (6)                   │
+│  Containers (6)                   │
 │                                      │
 │   ● pihole         0.5%     128MB   │
 │   ● plex          12.3%     2.1GB   │
@@ -190,18 +190,18 @@ GET /stats/pihole    → Pihole integration stats
 │   ○ nginx         stopped           │
 │                                      │
 ├──────────────────────────────────────┤
-│  🛡️ Pihole                           │
+│  Pihole                           │
 │   Queries: 45.6k   Blocked: 27.3%   │
 │   Status: Enabled                    │
 │                                      │
 ├──────────────────────────────────────┤
-│  ⚙️ Settings    ➕ Add Server        │
+│  Settings    Add Server        │
 └──────────────────────────────────────┘
 ```
 
 ---
 
-## 🚀 Roadmap
+## Roadmap
 
 ### Phase 1: MVP (Weeks 1-5)
 - [ ] Agent: Core system stats (CPU, RAM, disk, network)
@@ -235,7 +235,7 @@ GET /stats/pihole    → Pihole integration stats
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Agent
 - **Language**: Go
@@ -251,7 +251,7 @@ GET /stats/pihole    → Pihole integration stats
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 deskmon/
@@ -281,7 +281,7 @@ deskmon/
 
 ---
 
-## 🤝 Competition & Differentiation
+## Competition & Differentiation
 
 | Feature | Deskmon | iStatMenus | Beszel | Zabbix Monitor |
 |---------|-------|------------|--------|----------------|
@@ -295,7 +295,7 @@ deskmon/
 
 ---
 
-## 📄 License
+## License
 
 - **Agent**: MIT (open source)
 - **macOS App**: Proprietary (closed source)
