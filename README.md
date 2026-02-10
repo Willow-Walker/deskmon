@@ -131,38 +131,60 @@ Built with Swift and SwiftUI. Feels like a first-party Apple app. Follows macOS 
 
 ## Architecture
 
+Deskmon uses a simple client-agent architecture. There is no intermediate backend or cloud service.
+
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    macOS Menu Bar App                   │
-│                  (Swift/SwiftUI - Closed Source)        │
+│                     Your Mac                            │
+│  ┌───────────────────────────────────────────────────┐ │
+│  │            macOS Menu Bar App                     │ │
+│  │              (Pure SwiftUI)                       │ │
+│  │                                                   │ │
+│  │  - Stores server list (UserDefaults/SwiftData)   │ │
+│  │  - Polls each agent via HTTP                     │ │
+│  │  - Renders stats in native UI                    │ │
+│  │  - No local backend process needed               │ │
+│  └───────────────────────────────────────────────────┘ │
 └───────────────────────┬─────────────────────────────────┘
-                        │ HTTP/JSON (LAN)
+                        │ HTTP/JSON over LAN
                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│                    Deskmon Agent                          │
-│                  (Go - Open Source)                     │
-│  ┌─────────────┬─────────────┬─────────────────────┐   │
-│  │   System    │   Docker    │    Integrations     │   │
-│  │  Collector  │  Collector  │  (Pihole, Plex...)  │   │
-│  └─────────────┴─────────────┴─────────────────────┘   │
+│                   Your Server(s)                        │
+│  ┌───────────────────────────────────────────────────┐ │
+│  │              deskmon-agent (Go)                   │ │
+│  │                                                   │ │
+│  │  - Collects system stats (CPU, RAM, disk, net)   │ │
+│  │  - Queries Docker API for container stats        │ │
+│  │  - Queries app APIs (Pihole, Plex, etc.)         │ │
+│  │  - Serves JSON on port 7654                      │ │
+│  │  - THIS IS THE BACKEND                           │ │
+│  └───────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Communication
+### Key Points
+
+- **The agent IS the backend.** It runs on your server, collects data, and serves it via HTTP.
+- **The macOS app is a pure client.** It's 100% SwiftUI with no embedded backend or local server process.
+- **No cloud, no relay.** The app talks directly to your agent(s) over your local network.
+- **Multiple servers?** The app polls each agent independently.
+
+### Communication Flow
 
 1. Agent runs on server, binds to `0.0.0.0:7654`
-2. macOS app polls agent every N seconds over HTTP
-3. Optional: WebSocket for real-time updates (v2)
-4. Optional: Auth token for security
+2. macOS app stores list of server IPs in local storage
+3. App polls each agent every N seconds via HTTP GET
+4. App renders the JSON response in SwiftUI
+5. Optional: Auth token header for security
 
 ### Agent Endpoints
 
 ```
-GET /health          → { "status": "ok" }
-GET /stats           → Full system stats JSON
-GET /stats/system    → CPU, RAM, disk, network only
-GET /stats/docker    → Container stats only
-GET /stats/pihole    → Pihole integration stats
+GET /health          -> { "status": "ok" }
+GET /stats           -> Full system stats JSON
+GET /stats/system    -> CPU, RAM, disk, network only
+GET /stats/docker    -> Container stats only
+GET /stats/pihole    -> Pihole integration stats
 ```
 
 ---
@@ -237,17 +259,23 @@ GET /stats/pihole    → Pihole integration stats
 
 ## Tech Stack
 
-### Agent
+### Agent (runs on your server)
 - **Language**: Go
+- **Purpose**: Collect stats, serve JSON API (this is the backend)
 - **Dependencies**: Minimal (stdlib + docker client)
 - **Build**: Static binary, cross-compiled for Linux (amd64, arm64)
 - **Distribution**: GitHub releases, install script
+- **Source**: Open source (MIT) at [deskmon-agent](https://github.com/neur0map/deskmon-agent)
 
-### macOS App
+### macOS App (runs on your Mac)
 - **Language**: Swift 5.9+
-- **UI**: SwiftUI
+- **UI**: SwiftUI (pure, no embedded backend)
+- **Purpose**: HTTP client + native UI rendering
+- **Storage**: UserDefaults / SwiftData for server list and preferences
+- **Networking**: URLSession with async/await
 - **Target**: macOS 14 (Sonoma)+
 - **Distribution**: Direct download, potentially Mac App Store
+- **Source**: Closed source (proprietary)
 
 ---
 
