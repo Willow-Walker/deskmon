@@ -72,6 +72,17 @@ final class AgentClient: Sendable {
 
     private static let log = Logger(subsystem: "prowlsh.deskmon", category: "AgentClient")
 
+    /// Dedicated session for SSE streams — caching disabled, long timeouts.
+    private let sseSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 300     // 5 min idle (server keepalive every 30s)
+        config.timeoutIntervalForResource = 0      // No total transfer limit
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.urlCache = nil
+        config.waitsForConnectivity = true
+        return URLSession(configuration: config)
+    }()
+
     /// Two-step handshake: health check (reachable?) then stats fetch (token valid?).
     /// Returns a structured result so the caller can show the right error.
     func verifyConnection(host: String, port: Int, token: String) async -> ConnectionResult {
@@ -308,17 +319,16 @@ final class AgentClient: Sendable {
                 }
 
                 var request = URLRequest(url: url)
+                request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
                 if !trimmedToken.isEmpty {
                     request.setValue("Bearer \(trimmedToken)", forHTTPHeaderField: "Authorization")
                 }
-                // Long timeout for SSE — the stream stays open indefinitely.
-                // The server sends events every 1-10s, so the idle timer resets frequently.
-                request.timeoutInterval = 86400 // 24 hours
 
                 Self.log.info("SSE connecting to \(url.absoluteString)")
 
                 do {
-                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    let (bytes, response) = try await self.sseSession.bytes(for: request)
 
                     guard let http = response as? HTTPURLResponse else {
                         continuation.finish(throwing: AgentError.httpError(0))
