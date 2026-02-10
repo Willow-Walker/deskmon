@@ -145,7 +145,7 @@ Deskmon uses a simple client-agent architecture. There is no intermediate backen
 │  │              (Pure SwiftUI)                       │ │
 │  │                                                   │ │
 │  │  - Stores server list (UserDefaults/SwiftData)   │ │
-│  │  - Polls each agent via HTTP                     │ │
+│  │  - Streams live stats via SSE                    │ │
 │  │  - Renders stats in native UI                    │ │
 │  │  - No local backend process needed               │ │
 │  └───────────────────────────────────────────────────┘ │
@@ -177,9 +177,9 @@ Deskmon uses a simple client-agent architecture. There is no intermediate backen
 
 1. Agent runs on server, binds to `0.0.0.0:7654`
 2. macOS app stores list of server IPs in local storage
-3. App polls each agent every N seconds via HTTP GET
-4. App renders the JSON response in SwiftUI
-5. Optional: Auth token header for security
+3. App connects to each agent via SSE (`GET /stats/stream`) for live updates
+4. System stats stream every 1s, Docker every 5s, services every 10s
+5. Auth token header required for all endpoints
 
 ### Agent Endpoints
 
@@ -187,7 +187,8 @@ See [`docs/agent-api-contract.md`](docs/agent-api-contract.md) for the full API 
 
 ```
 GET /health          -> { "status": "ok" }
-GET /stats           -> Full system + container stats JSON
+GET /stats           -> Full system + container + process + service stats
+GET /stats/stream    -> SSE stream (system 1s, docker 5s, services 10s)
 ```
 
 ---
@@ -237,12 +238,21 @@ GET /stats           -> Full system + container stats JSON
 - [x] macOS: Popover with live stats (380x600 menu bar popover)
 - [x] macOS: Full window with sidebar + detail panel (Cmd+1)
 - [x] macOS: Add/edit/remove servers
-- [x] macOS: Settings (polling toggle, refresh interval, restart agent)
+- [x] macOS: Settings (SSE live connection, restart agent)
 - [x] macOS: Docker container detail panel (CPU, memory, network, disk I/O)
 - [x] macOS: OLED dark theme with orange accent
 - [x] macOS: API contract defined ([docs/agent-api-contract.md](docs/agent-api-contract.md))
 
 ### Phase 2: Integrations (Weeks 6-8)
+- [x] Agent: SSE streaming (replaces HTTP polling)
+- [x] Agent: Service auto-detection (Pi-hole, Traefik, Nginx)
+- [x] Agent: Container actions (start/stop/restart)
+- [x] Agent: Process management (kill by PID)
+- [x] Agent: Top processes list
+- [x] macOS: Live SSE connection with auto-reconnect
+- [x] macOS: Container actions from UI
+- [x] macOS: Process list with kill support
+- [x] macOS: Service dashboards (Pi-hole, Traefik)
 - [ ] Agent: Pihole integration
 - [ ] Agent: Plex integration
 - [ ] Agent: Config file for integrations
@@ -279,7 +289,7 @@ GET /stats           -> Full system + container stats JSON
 - **UI**: SwiftUI (pure, no embedded backend)
 - **Purpose**: HTTP client + native UI rendering
 - **State**: @Observable with @MainActor isolation
-- **Networking**: URLSession with async/await (mock data currently)
+- **Networking**: URLSession with async/await, SSE streaming
 - **Target**: macOS 26 (Tahoe)
 - **Distribution**: Direct download, potentially Mac App Store
 - **Source**: Closed source (proprietary)
@@ -298,8 +308,8 @@ deskmon/                          # This repo — macOS app
 │   │   ├── ServerStatus.swift    # Enum: healthy/warning/critical/offline
 │   │   └── DockerContainer.swift # Container model with full stats
 │   ├── Services/
-│   │   ├── ServerManager.swift   # @Observable: polling, state, CRUD
-│   │   └── AgentClient.swift     # HTTP client for deskmon-agent API
+│   │   ├── ServerManager.swift   # @Observable: SSE streaming, state, CRUD
+│   │   └── AgentClient.swift     # HTTP + SSE client for deskmon-agent API
 │   ├── Views/
 │   │   ├── DashboardView.swift       # Menu bar popover (380x600)
 │   │   ├── MainDashboardView.swift   # Full window (sidebar + detail)

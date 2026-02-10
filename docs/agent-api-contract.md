@@ -15,6 +15,13 @@ What the macOS app expects from `deskmon-agent`. This is the source of truth for
 | `GET` | `/stats` | Yes | Full payload (system + containers) |
 | `GET` | `/stats/system` | Yes | System stats only |
 | `GET` | `/stats/docker` | Yes | Docker container stats only |
+| `GET` | `/stats/processes` | Yes | Top processes by CPU |
+| `GET` | `/stats/services` | Yes | Detected service stats |
+| `GET` | `/stats/stream` | Yes | SSE stream of live stats |
+| `POST` | `/containers/{id}/start` | Yes | Start a Docker container |
+| `POST` | `/containers/{id}/stop` | Yes | Stop a Docker container |
+| `POST` | `/containers/{id}/restart` | Yes | Restart a Docker container |
+| `POST` | `/processes/{pid}/kill` | Yes | Kill a process by PID |
 | `POST` | `/agent/restart` | Yes | Restart the agent |
 | `POST` | `/agent/stop` | Yes | Stop the agent |
 | `GET` | `/agent/status` | Yes | Agent version and status |
@@ -216,12 +223,26 @@ The agent should return `401 Unauthorized` if a token is configured on the agent
 
 ---
 
-## Future Fields (Not Yet Required)
+## GET /stats/stream (SSE)
 
-These are planned but not currently rendered in the UI. Do not implement yet.
+Server-Sent Events endpoint for live stats. The app opens a persistent connection and receives events.
 
-- `containers[].ports` — Array of port mappings `[{"host": 8080, "container": 80, "protocol": "tcp"}]`
+**Event types:**
+
+| Event | Interval | Payload |
+|-------|----------|---------|
+| `system` | 1s | `{"system": {...}, "processes": [...]}` |
+| `docker` | 5s | `[{container}, ...]` |
+| `services` | 10s | `[{service}, ...]` |
+| `: keepalive` | 30s | Comment (empty) |
+
+The app connects via: fetch once (`GET /stats`), then open stream (`GET /stats/stream`).
+Auto-reconnects with exponential backoff (2s → 4s → 8s → max 30s).
+
+---
+
+## Implemented Container Fields
+
+- `containers[].ports` — Array of port mappings `[{"hostPort": 8080, "containerPort": 80, "protocol": "tcp"}]`
 - `containers[].restartCount` — Number of container restarts
 - `containers[].healthStatus` — `"healthy"`, `"unhealthy"`, `"starting"`, `"none"`
-- `containers[].healthLog` — Last health check output string
-- WebSocket endpoint (`/ws`) for log streaming and container actions
