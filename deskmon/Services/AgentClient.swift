@@ -350,23 +350,35 @@ final class AgentClient: Sendable {
                     var currentEvent = ""
                     var dataBuffer = ""
 
-                    for try await line in bytes.lines {
+                    // Iterate over raw bytes instead of `bytes.lines` to avoid
+                    // URLSession's internal line-buffering which batches data
+                    // and causes "burst update" behavior (10-30s stalls).
+                    var lineBuffer = Data()
+                    for try await byte in bytes {
                         if Task.isCancelled { break }
 
-                        if line.hasPrefix("event: ") {
-                            currentEvent = String(line.dropFirst(7))
-                        } else if line.hasPrefix("data: ") {
-                            dataBuffer = String(line.dropFirst(6))
-                        } else if line.hasPrefix(":") {
-                            // Comment line (keepalive)
-                            continuation.yield(.keepalive)
-                        } else if line.isEmpty && !currentEvent.isEmpty {
-                            // Empty line = end of event
-                            if let event = Self.decodeSSEEvent(type: currentEvent, data: dataBuffer) {
-                                continuation.yield(event)
+                        if byte == UInt8(ascii: "\n") {
+                            let line = String(data: lineBuffer, encoding: .utf8) ?? ""
+                            lineBuffer.removeAll(keepingCapacity: true)
+
+                            if line.hasPrefix("event: ") {
+                                currentEvent = String(line.dropFirst(7))
+                            } else if line.hasPrefix("data: ") {
+                                dataBuffer = String(line.dropFirst(6))
+                            } else if line.hasPrefix(":") {
+                                // Comment line (keepalive)
+                                continuation.yield(.keepalive)
+                            } else if line.isEmpty && !currentEvent.isEmpty {
+                                // Empty line = end of event
+                                if let event = Self.decodeSSEEvent(type: currentEvent, data: dataBuffer) {
+                                    continuation.yield(event)
+                                }
+                                currentEvent = ""
+                                dataBuffer = ""
                             }
-                            currentEvent = ""
-                            dataBuffer = ""
+                        } else if byte != UInt8(ascii: "\r") {
+                            // Skip \r (SSE uses \n or \r\n line endings)
+                            lineBuffer.append(byte)
                         }
                     }
 
