@@ -49,11 +49,17 @@ final class ServerManager {
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { break }
+                let start = ContinuousClock.now
                 await self.refreshData()
-                do {
-                    try await Task.sleep(for: .seconds(self.pollingInterval))
-                } catch {
-                    break
+                let elapsed = ContinuousClock.now - start
+                let target = Duration.seconds(self.pollingInterval)
+                let remaining = target - elapsed
+                if remaining > .zero {
+                    do {
+                        try await Task.sleep(for: remaining)
+                    } catch {
+                        break
+                    }
                 }
             }
         }
