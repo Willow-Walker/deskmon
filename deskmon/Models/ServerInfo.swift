@@ -12,7 +12,7 @@ final class ServerInfo: Identifiable {
     var stats: ServerStats? = nil
     var containers: [DockerContainer] = []
 
-    init(id: UUID = UUID(), name: String, host: String, port: Int = 9090, token: String = "") {
+    init(id: UUID = UUID(), name: String, host: String, port: Int = 7654, token: String = "") {
         self.id = id
         self.name = name
         self.host = host

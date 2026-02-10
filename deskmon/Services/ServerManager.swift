@@ -19,6 +19,7 @@ final class ServerManager {
         ("1s", 1), ("3s", 3), ("5s", 5), ("10s", 10), ("30s", 30), ("60s", 60)
     ]
 
+    private let client = AgentClient.shared
     private var pollingTask: Task<Void, Never>?
 
     var selectedServer: ServerInfo? {
@@ -30,26 +31,30 @@ final class ServerManager {
     }
 
     init() {
-        let homelab = ServerInfo(name: "Homelab", host: "192.168.1.100")
-        let media = ServerInfo(name: "Media Server", host: "192.168.1.200")
-        servers = [homelab, media]
-        selectedServerID = homelab.id
-        refreshData()
         startPolling()
     }
+
+    // MARK: - Connection Verification
+
+    /// Two-step handshake used by AddServerSheet / EditServerSheet before saving.
+    func testConnection(host: String, port: Int, token: String) async -> ConnectionResult {
+        await client.verifyConnection(host: host, port: port, token: token)
+    }
+
+    // MARK: - Polling
 
     func startPolling() {
         guard !isPolling else { return }
         isPolling = true
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
+                guard let self else { break }
+                await self.refreshData()
                 do {
-                    try await Task.sleep(for: .seconds(self?.pollingInterval ?? 3))
+                    try await Task.sleep(for: .seconds(self.pollingInterval))
                 } catch {
                     break
                 }
-                guard let self else { break }
-                self.refreshData()
             }
         }
     }
@@ -60,16 +65,52 @@ final class ServerManager {
         pollingTask = nil
     }
 
-    func refreshData() {
-        withAnimation(.easeInOut(duration: 0.5)) {
-            for (index, server) in servers.enumerated() {
-                let stats = MockDataProvider.generateStats(serverIndex: index)
-                server.stats = stats
-                server.status = MockDataProvider.generateStatus(from: stats)
-                server.containers = MockDataProvider.generateContainers(serverIndex: index)
+    // MARK: - Data Fetching
+
+    /// Polls each server with a single GET /stats request.
+    /// Uses fetchStats directly — no health check per cycle.
+    func refreshData() async {
+        guard !servers.isEmpty else { return }
+
+        let connections = servers.map { server in
+            (id: server.id, host: server.host, port: server.port, token: server.token)
+        }
+
+        await withTaskGroup(of: (UUID, FetchResult).self) { group in
+            for conn in connections {
+                group.addTask { [client] in
+                    do {
+                        let response = try await client.fetchStats(
+                            host: conn.host, port: conn.port, token: conn.token
+                        )
+                        return (conn.id, .success(response))
+                    } catch let error as AgentError where error == .unauthorized {
+                        return (conn.id, .unauthorized)
+                    } catch {
+                        return (conn.id, .offline)
+                    }
+                }
+            }
+
+            for await (id, result) in group {
+                guard let server = servers.first(where: { $0.id == id }) else { continue }
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    switch result {
+                    case .success(let response):
+                        server.stats = response.system
+                        server.containers = response.containers
+                        server.status = Self.deriveStatus(from: response.system)
+                    case .unauthorized:
+                        server.status = .unauthorized
+                    case .offline:
+                        server.status = .offline
+                    }
+                }
             }
         }
     }
+
+    // MARK: - Server Management
 
     func addServer(name: String, host: String, port: Int, token: String) {
         let server = ServerInfo(name: name, host: host, port: port, token: token)
@@ -97,4 +138,23 @@ final class ServerManager {
     func selectServer(_ server: ServerInfo) {
         selectedServerID = server.id
     }
+
+    // MARK: - Status Derivation
+
+    private static func deriveStatus(from stats: ServerStats) -> ServerStatus {
+        if stats.cpu.usagePercent > 90 || stats.memory.usagePercent > 95 {
+            return .critical
+        } else if stats.cpu.usagePercent > 75 || stats.memory.usagePercent > 85 {
+            return .warning
+        }
+        return .healthy
+    }
+}
+
+// MARK: - Fetch Result (internal to polling)
+
+private enum FetchResult: Sendable {
+    case success(AgentStatsResponse)
+    case unauthorized
+    case offline
 }

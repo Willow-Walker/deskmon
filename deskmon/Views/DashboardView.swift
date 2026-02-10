@@ -12,6 +12,8 @@ struct DashboardView: View {
     @State private var editHost = ""
     @State private var editPort = ""
     @State private var editToken = ""
+    @State private var editTesting = false
+    @State private var editError: String?
 
     var body: some View {
         @Bindable var manager = serverManager
@@ -204,6 +206,19 @@ struct DashboardView: View {
 
     // MARK: - Inline Edit Panel
 
+    private var editNeedsReVerify: Bool {
+        guard let server = editingServer else { return true }
+        return editHost != server.host ||
+               editPort != String(server.port) ||
+               editToken != server.token
+    }
+
+    private var editIsValid: Bool {
+        !editName.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !editHost.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !editToken.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     private func inlineEditPanel(server: ServerInfo) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -226,23 +241,19 @@ struct DashboardView: View {
 
                 Spacer()
 
-                Button("Save") {
-                    let portNum = Int(editPort) ?? 9090
-                    serverManager.updateServer(
-                        id: server.id,
-                        name: editName.trimmingCharacters(in: .whitespaces),
-                        host: editHost.trimmingCharacters(in: .whitespaces),
-                        port: portNum,
-                        token: editToken
-                    )
-                    withAnimation(.smooth(duration: 0.3)) {
-                        editingServer = nil
+                Button {
+                    Task { await testAndSaveEdit(server: server) }
+                } label: {
+                    if editTesting {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text("Save")
                     }
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.accent)
-                .disabled(editName.trimmingCharacters(in: .whitespaces).isEmpty ||
-                          editHost.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(!editIsValid || editTesting)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 12)
@@ -253,19 +264,71 @@ struct DashboardView: View {
                     editField("Host / IP", text: $editHost, prompt: "192.168.1.100")
 
                     HStack(spacing: 12) {
-                        editField("Port", text: $editPort, prompt: "9090")
+                        editField("Port", text: $editPort, prompt: "7654")
                             .frame(width: 100)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Token")
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
-                            SecureField("", text: $editToken, prompt: Text("Optional").foregroundStyle(.quaternary))
+                            SecureField("", text: $editToken, prompt: Text("Agent token").foregroundStyle(.quaternary))
                                 .textFieldStyle(.roundedBorder)
                         }
+                    }
+
+                    if let editError {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(Theme.critical)
+                            Text(editError)
+                                .foregroundStyle(Theme.critical)
+                        }
+                        .font(.caption)
                     }
                 }
                 .padding(12)
             }
+        }
+    }
+
+    private func testAndSaveEdit(server: ServerInfo) async {
+        editError = nil
+
+        let trimmedHost = editHost.trimmingCharacters(in: .whitespaces)
+        let trimmedToken = editToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        let portNum = Int(editPort) ?? 7654
+
+        if editNeedsReVerify {
+            editTesting = true
+            defer { editTesting = false }
+
+            let result = await serverManager.testConnection(
+                host: trimmedHost, port: portNum, token: trimmedToken
+            )
+
+            switch result {
+            case .success:
+                break
+            case .unreachable:
+                editError = "Server unreachable at \(trimmedHost):\(portNum)"
+                return
+            case .unauthorized:
+                editError = "Invalid token"
+                return
+            case .error(let msg):
+                editError = msg
+                return
+            }
+        }
+
+        serverManager.updateServer(
+            id: server.id,
+            name: editName.trimmingCharacters(in: .whitespaces),
+            host: trimmedHost,
+            port: portNum,
+            token: trimmedToken
+        )
+        withAnimation(.smooth(duration: 0.3)) {
+            editingServer = nil
         }
     }
 
@@ -361,6 +424,8 @@ struct DashboardView: View {
         editHost = server.host
         editPort = String(server.port)
         editToken = server.token
+        editTesting = false
+        editError = nil
         withAnimation(.smooth(duration: 0.3)) {
             editingServer = server
         }

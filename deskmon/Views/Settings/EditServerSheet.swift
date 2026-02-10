@@ -11,6 +11,9 @@ struct EditServerSheet: View {
     @State private var port: String
     @State private var token: String
 
+    @State private var isTesting = false
+    @State private var errorMessage: String?
+
     init(server: ServerInfo) {
         self.server = server
         _name = State(initialValue: server.name)
@@ -21,11 +24,19 @@ struct EditServerSheet: View {
 
     private var isValid: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !host.trimmingCharacters(in: .whitespaces).isEmpty
+        !host.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !token.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private var hasChanges: Bool {
         name != server.name ||
+        host != server.host ||
+        port != String(server.port) ||
+        token != server.token
+    }
+
+    /// Only re-verify if connection details changed (host, port, or token).
+    private var needsReVerify: Bool {
         host != server.host ||
         port != String(server.port) ||
         token != server.token
@@ -43,10 +54,20 @@ struct EditServerSheet: View {
                 field("Host / IP", text: $host, prompt: "192.168.1.100")
 
                 HStack(spacing: 12) {
-                    field("Port", text: $port, prompt: "9090")
+                    field("Port", text: $port, prompt: "7654")
                         .frame(width: 100)
-                    secureField("Token", text: $token, prompt: "Optional")
+                    secureField("Token", text: $token, prompt: "Agent token")
                 }
+            }
+
+            if let errorMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Theme.critical)
+                    Text(errorMessage)
+                        .foregroundStyle(Theme.critical)
+                }
+                .font(.caption)
             }
 
             Spacer()
@@ -57,27 +78,69 @@ struct EditServerSheet: View {
 
                 Spacer()
 
-                Button("Save") {
-                    let portNum = Int(port) ?? 9090
-                    serverManager.updateServer(
-                        id: server.id,
-                        name: name.trimmingCharacters(in: .whitespaces),
-                        host: host.trimmingCharacters(in: .whitespaces),
-                        port: portNum,
-                        token: token
-                    )
-                    dismiss()
+                Button {
+                    Task { await testAndSave() }
+                } label: {
+                    if isTesting {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(.horizontal, 8)
+                    } else {
+                        Text("Save")
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!isValid || !hasChanges)
+                .disabled(!isValid || !hasChanges || isTesting)
             }
         }
         .padding(.horizontal, 24)
         .padding(.top, 24)
         .padding(.bottom, 20)
-        .frame(width: 380, height: 290)
+        .frame(width: 380, height: 320)
         .background(Theme.background)
         .preferredColorScheme(.dark)
+    }
+
+    private func testAndSave() async {
+        errorMessage = nil
+
+        let trimmedHost = host.trimmingCharacters(in: .whitespaces)
+        let portNum = Int(port) ?? 7654
+
+        // Only re-verify connection if host/port/token changed
+        if needsReVerify {
+            isTesting = true
+            defer { isTesting = false }
+
+            let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let result = await serverManager.testConnection(
+                host: trimmedHost, port: portNum, token: trimmedToken
+            )
+
+            switch result {
+            case .success:
+                break
+            case .unreachable:
+                errorMessage = "Server unreachable at \(trimmedHost):\(portNum)"
+                return
+            case .unauthorized:
+                errorMessage = "Invalid token — check your agent config"
+                return
+            case .error(let msg):
+                errorMessage = msg
+                return
+            }
+        }
+
+        serverManager.updateServer(
+            id: server.id,
+            name: name.trimmingCharacters(in: .whitespaces),
+            host: trimmedHost,
+            port: portNum,
+            token: token.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        dismiss()
     }
 
     private func field(_ label: String, text: Binding<String>, prompt: String) -> some View {

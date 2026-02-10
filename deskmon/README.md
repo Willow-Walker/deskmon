@@ -306,7 +306,7 @@ deskmon/                          # This repo — macOS app
 │   │   └── DockerContainer.swift # Container model with full stats
 │   ├── Services/
 │   │   ├── ServerManager.swift   # @Observable: polling, state, CRUD
-│   │   └── MockDataProvider.swift # Realistic fluctuating mock data
+│   │   └── AgentClient.swift     # HTTP client for deskmon-agent API
 │   ├── Views/
 │   │   ├── DashboardView.swift       # Menu bar popover (380x600)
 │   │   ├── MainDashboardView.swift   # Full window (sidebar + detail)

@@ -9,10 +9,15 @@ What the macOS app expects from `deskmon-agent`. This is the source of truth for
 
 ## Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Simple health check |
-| `GET` | `/stats` | Full payload (system + containers) |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/health` | No | Simple health check |
+| `GET` | `/stats` | Yes | Full payload (system + containers) |
+| `GET` | `/stats/system` | Yes | System stats only |
+| `GET` | `/stats/docker` | Yes | Docker container stats only |
+| `POST` | `/agent/restart` | Yes | Restart the agent |
+| `POST` | `/agent/stop` | Yes | Stop the agent |
+| `GET` | `/agent/status` | Yes | Agent version and status |
 
 ---
 
@@ -40,24 +45,26 @@ Full system stats and Docker container stats in a single response.
 
 ```json
 {
-  "cpu": {
-    "usagePercent": 42.5,
-    "coreCount": 8,
-    "temperature": 64.7
+  "system": {
+    "cpu": {
+      "usagePercent": 42.5,
+      "coreCount": 8,
+      "temperature": 64.7
+    },
+    "memory": {
+      "usedBytes": 22548578304,
+      "totalBytes": 34359738368
+    },
+    "disk": {
+      "usedBytes": 279172874240,
+      "totalBytes": 536870912000
+    },
+    "network": {
+      "downloadBytesPerSec": 13631488.0,
+      "uploadBytesPerSec": 3145728.0
+    },
+    "uptimeSeconds": 1048962
   },
-  "memory": {
-    "usedBytes": 22548578304,
-    "totalBytes": 34359738368
-  },
-  "disk": {
-    "usedBytes": 279172874240,
-    "totalBytes": 536870912000
-  },
-  "network": {
-    "downloadBytesPerSec": 13631488.0,
-    "uploadBytesPerSec": 3145728.0
-  },
-  "uptimeSeconds": 1048962,
   "containers": [
     {
       "id": "a1b2c3d4e5f6",
@@ -78,6 +85,8 @@ Full system stats and Docker container stats in a single response.
 }
 ```
 
+System stats are nested under `"system"`. Containers are at the top level alongside it.
+
 If Docker is not installed or the socket is unavailable, `containers` should be an empty array `[]`.
 
 ---
@@ -86,18 +95,20 @@ If Docker is not installed or the socket is unavailable, `containers` should be 
 
 ### System Stats
 
+All system fields are nested under the `"system"` key.
+
 | Field | Type | Unit | Description |
 |-------|------|------|-------------|
-| `cpu.usagePercent` | `float64` | `%` (0-100) | Overall CPU usage across all cores |
-| `cpu.coreCount` | `int` | count | Number of logical CPU cores |
-| `cpu.temperature` | `float64` | `°C` | CPU package temperature. `0` if unavailable |
-| `memory.usedBytes` | `int64` | bytes | Used RAM (excluding buffers/cache) |
-| `memory.totalBytes` | `int64` | bytes | Total physical RAM |
-| `disk.usedBytes` | `int64` | bytes | Used space on root mount (`/`) |
-| `disk.totalBytes` | `int64` | bytes | Total space on root mount (`/`) |
-| `network.downloadBytesPerSec` | `float64` | bytes/sec | Current download rate across all interfaces |
-| `network.uploadBytesPerSec` | `float64` | bytes/sec | Current upload rate across all interfaces |
-| `uptimeSeconds` | `int` | seconds | System uptime since last boot |
+| `system.cpu.usagePercent` | `float64` | `%` (0-100) | Overall CPU usage across all cores |
+| `system.cpu.coreCount` | `int` | count | Number of logical CPU cores |
+| `system.cpu.temperature` | `float64` | `°C` | CPU package temperature. `0` if unavailable |
+| `system.memory.usedBytes` | `uint64` | bytes | Used RAM (excluding buffers/cache) |
+| `system.memory.totalBytes` | `uint64` | bytes | Total physical RAM |
+| `system.disk.usedBytes` | `uint64` | bytes | Used space on root mount (`/`) |
+| `system.disk.totalBytes` | `uint64` | bytes | Total space on root mount (`/`) |
+| `system.network.downloadBytesPerSec` | `float64` | bytes/sec | Current download rate across all interfaces |
+| `system.network.uploadBytesPerSec` | `float64` | bytes/sec | Current upload rate across all interfaces |
+| `system.uptimeSeconds` | `int64` | seconds | System uptime since last boot |
 
 ### CPU Usage Calculation
 
