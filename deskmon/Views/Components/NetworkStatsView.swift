@@ -65,23 +65,28 @@ private struct NetworkSparkline: View {
                 return
             }
 
+            // Smooth raw data with a 3-sample weighted moving average
+            let dlSmoothed = smoothed(samples.map(\.download))
+            let ulSmoothed = smoothed(samples.map(\.upload))
+
             // Find the peak value across both channels for scaling
-            let peak = samples.reduce(0.0) { max($0, max($1.download, $1.upload)) }
+            let peak = max(
+                dlSmoothed.max() ?? 0,
+                ulSmoothed.max() ?? 0
+            )
             let ceiling = peak > 0 ? peak * 1.15 : 1 // 15% headroom
 
             let stepX = size.width / CGFloat(ServerInfo.maxNetworkSamples - 1)
             let offsetX = CGFloat(ServerInfo.maxNetworkSamples - samples.count) * stepX
 
             // Draw download (filled area)
-            let dlPath = buildPath(
-                samples: samples.map(\.download),
-                size: size, ceiling: ceiling,
+            let dlPath = buildCatmullRomPath(
+                samples: dlSmoothed, size: size, ceiling: ceiling,
                 stepX: stepX, offsetX: offsetX
             )
             let dlFill = buildFillPath(
-                samples: samples.map(\.download),
-                size: size, ceiling: ceiling,
-                stepX: stepX, offsetX: offsetX
+                from: dlPath, samples: dlSmoothed,
+                size: size, stepX: stepX, offsetX: offsetX
             )
 
             context.fill(dlFill, with: .linearGradient(
@@ -92,15 +97,13 @@ private struct NetworkSparkline: View {
             context.stroke(dlPath, with: .color(Theme.download.opacity(0.8)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
 
             // Draw upload (filled area)
-            let ulPath = buildPath(
-                samples: samples.map(\.upload),
-                size: size, ceiling: ceiling,
+            let ulPath = buildCatmullRomPath(
+                samples: ulSmoothed, size: size, ceiling: ceiling,
                 stepX: stepX, offsetX: offsetX
             )
             let ulFill = buildFillPath(
-                samples: samples.map(\.upload),
-                size: size, ceiling: ceiling,
-                stepX: stepX, offsetX: offsetX
+                from: ulPath, samples: ulSmoothed,
+                size: size, stepX: stepX, offsetX: offsetX
             )
 
             context.fill(ulFill, with: .linearGradient(
@@ -114,34 +117,66 @@ private struct NetworkSparkline: View {
         .background(Color.white.opacity(0.03), in: .rect(cornerRadius: 6))
     }
 
-    // MARK: - Path Builders
+    // MARK: - Data Smoothing
 
-    private func buildPath(samples: [Double], size: CGSize, ceiling: Double, stepX: CGFloat, offsetX: CGFloat) -> Path {
-        Path { path in
-            for (i, value) in samples.enumerated() {
-                let x = offsetX + CGFloat(i) * stepX
-                let y = size.height - (CGFloat(value / ceiling) * size.height)
-                if i == 0 {
-                    path.move(to: CGPoint(x: x, y: y))
-                } else {
-                    // Smooth curve between points
-                    let prevX = offsetX + CGFloat(i - 1) * stepX
-                    let prevValue = samples[i - 1]
-                    let prevY = size.height - (CGFloat(prevValue / ceiling) * size.height)
-                    let midX = (prevX + x) / 2
-                    path.addCurve(
-                        to: CGPoint(x: x, y: y),
-                        control1: CGPoint(x: midX, y: prevY),
-                        control2: CGPoint(x: midX, y: y)
-                    )
-                }
+    /// Weighted moving average: [0.2, 0.6, 0.2] kernel
+    private func smoothed(_ values: [Double]) -> [Double] {
+        guard values.count >= 3 else { return values }
+        var result = [Double](repeating: 0, count: values.count)
+        result[0] = values[0]
+        result[values.count - 1] = values[values.count - 1]
+        for i in 1..<(values.count - 1) {
+            result[i] = values[i - 1] * 0.2 + values[i] * 0.6 + values[i + 1] * 0.2
+        }
+        return result
+    }
+
+    // MARK: - Catmull-Rom Spline Path
+
+    /// Builds a smooth Catmull-Rom spline through data points.
+    /// Tension 0.5 gives a centripetal Catmull-Rom (no cusps, no self-intersections).
+    private func buildCatmullRomPath(samples: [Double], size: CGSize, ceiling: Double, stepX: CGFloat, offsetX: CGFloat) -> Path {
+        let points: [CGPoint] = samples.enumerated().map { i, value in
+            let x = offsetX + CGFloat(i) * stepX
+            let y = size.height - (CGFloat(value / ceiling) * size.height)
+            return CGPoint(x: x, y: y)
+        }
+
+        return Path { path in
+            guard points.count >= 2 else { return }
+            path.move(to: points[0])
+
+            if points.count == 2 {
+                path.addLine(to: points[1])
+                return
+            }
+
+            let tension: CGFloat = 0.5
+
+            for i in 0..<(points.count - 1) {
+                let p0 = i > 0 ? points[i - 1] : points[i]
+                let p1 = points[i]
+                let p2 = points[i + 1]
+                let p3 = (i + 2) < points.count ? points[i + 2] : points[i + 1]
+
+                let cp1 = CGPoint(
+                    x: p1.x + (p2.x - p0.x) / (6 * tension),
+                    y: p1.y + (p2.y - p0.y) / (6 * tension)
+                )
+                let cp2 = CGPoint(
+                    x: p2.x - (p3.x - p1.x) / (6 * tension),
+                    y: p2.y - (p3.y - p1.y) / (6 * tension)
+                )
+
+                path.addCurve(to: p2, control1: cp1, control2: cp2)
             }
         }
     }
 
-    private func buildFillPath(samples: [Double], size: CGSize, ceiling: Double, stepX: CGFloat, offsetX: CGFloat) -> Path {
-        var path = buildPath(samples: samples, size: size, ceiling: ceiling, stepX: stepX, offsetX: offsetX)
-        // Close the path along the bottom
+    // MARK: - Fill Path
+
+    private func buildFillPath(from linePath: Path, samples: [Double], size: CGSize, stepX: CGFloat, offsetX: CGFloat) -> Path {
+        var path = linePath
         let lastX = offsetX + CGFloat(samples.count - 1) * stepX
         let firstX = offsetX
         path.addLine(to: CGPoint(x: lastX, y: size.height))
