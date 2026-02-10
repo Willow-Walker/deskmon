@@ -283,7 +283,7 @@ struct MainDashboardView: View {
                         )
                     }
 
-                    networkCard(stats: stats, history: server.displayNetworkHistory, batchID: server.networkBatchID)
+                    networkCard(stats: stats, history: server.networkHistory)
 
                     if !server.containers.isEmpty {
                         ContainerTableView(
@@ -423,8 +423,8 @@ struct MainDashboardView: View {
 
     // MARK: - Network
 
-    private func networkCard(stats: ServerStats, history: [NetworkSample], batchID: UInt64) -> some View {
-        NetworkStatsView(network: stats.network, history: history, batchID: batchID)
+    private func networkCard(stats: ServerStats, history: [NetworkSample]) -> some View {
+        NetworkStatsView(network: stats.network, history: history)
     }
 
     // MARK: - Settings Popover

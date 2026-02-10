@@ -3,7 +3,6 @@ import SwiftUI
 struct NetworkStatsView: View {
     let network: NetworkStats
     let history: [NetworkSample]
-    let batchID: UInt64
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -39,8 +38,8 @@ struct NetworkStatsView: View {
                 }
             }
 
-            // Sparkline graph
-            NetworkSparkline(history: history, batchID: batchID)
+            // Sparkline graph — continuously scrolling at 60fps
+            NetworkSparkline(history: history)
                 .frame(height: 48)
         }
         .padding(10)
@@ -50,21 +49,20 @@ struct NetworkStatsView: View {
 
 // MARK: - Sparkline
 
+/// Renders a continuously-scrolling network sparkline.
+///
+/// Uses `TimelineView(.animation)` to redraw every display frame (~60fps).
+/// Each sample's X position is computed from wall-clock time, so the graph
+/// drifts left at a constant rate — like a chart recorder. No discrete
+/// "refresh" moments are visible.
 private struct NetworkSparkline: View {
     let history: [NetworkSample]
-    let batchID: UInt64
 
-    private static let batchSize = CGFloat(ServerInfo.networkBatchSize)
-
-    /// Animated batchSize→0 progress that drives the horizontal slide.
-    /// At batchSize the graph is shifted right by N steps (pre-scroll);
-    /// at 0 it shows the final position with the new batch visible.
-    @State private var scrollPhase: CGFloat = 0
+    private static let windowDuration = ServerInfo.windowDuration // 60s visible
 
     var body: some View {
-        GeometryReader { geo in
-            let visible = ServerInfo.visibleNetworkSamples // 60
-            let stepX = geo.size.width / CGFloat(visible - 1)
+        TimelineView(.animation) { timeline in
+            let now = timeline.date.timeIntervalSinceReferenceDate
 
             Canvas { context, size in
                 let samples = history
@@ -77,28 +75,29 @@ private struct NetworkSparkline: View {
                     return
                 }
 
+                let pps = size.width / CGFloat(Self.windowDuration) // pixels per second
+
+                // Smooth raw values
                 let dlSmoothed = smoothed(samples.map(\.download))
                 let ulSmoothed = smoothed(samples.map(\.upload))
 
                 let peak = max(dlSmoothed.max() ?? 0, ulSmoothed.max() ?? 0)
                 let ceiling = peak > 0 ? peak * 1.15 : 1
 
-                // scrollPhase shifts the entire graph right by N steps.
-                // At batchSize the new batch is hidden off-screen right;
-                // as it animates to 0 the graph slides left, revealing them.
-                let baseOffset = CGFloat(visible - samples.count) * stepX
-                let xShift = scrollPhase * stepX
-                let offsetX = baseOffset + xShift
+                // Build time-based points: X = distance from right edge based on age
+                func makePoints(_ values: [Double]) -> [CGPoint] {
+                    values.enumerated().map { i, value in
+                        let age = now - samples[i].time
+                        let x = size.width - CGFloat(age) * pps
+                        let y = size.height - CGFloat(value / ceiling) * size.height
+                        return CGPoint(x: x, y: y)
+                    }
+                }
 
                 // Download
-                let dlPath = buildCatmullRomPath(
-                    samples: dlSmoothed, size: size, ceiling: ceiling,
-                    stepX: stepX, offsetX: offsetX
-                )
-                let dlFill = buildFillPath(
-                    from: dlPath, samples: dlSmoothed,
-                    size: size, stepX: stepX, offsetX: offsetX
-                )
+                let dlPoints = makePoints(dlSmoothed)
+                let dlPath = catmullRomPath(through: dlPoints)
+                let dlFill = fillPath(from: dlPath, points: dlPoints, height: size.height)
                 context.fill(dlFill, with: .linearGradient(
                     Gradient(colors: [Theme.download.opacity(0.3), Theme.download.opacity(0.02)]),
                     startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)
@@ -107,14 +106,9 @@ private struct NetworkSparkline: View {
                                style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
 
                 // Upload
-                let ulPath = buildCatmullRomPath(
-                    samples: ulSmoothed, size: size, ceiling: ceiling,
-                    stepX: stepX, offsetX: offsetX
-                )
-                let ulFill = buildFillPath(
-                    from: ulPath, samples: ulSmoothed,
-                    size: size, stepX: stepX, offsetX: offsetX
-                )
+                let ulPoints = makePoints(ulSmoothed)
+                let ulPath = catmullRomPath(through: ulPoints)
+                let ulFill = fillPath(from: ulPath, points: ulPoints, height: size.height)
                 context.fill(ulFill, with: .linearGradient(
                     Gradient(colors: [Theme.upload.opacity(0.25), Theme.upload.opacity(0.02)]),
                     startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)
@@ -125,14 +119,6 @@ private struct NetworkSparkline: View {
         }
         .clipShape(.rect(cornerRadius: 6))
         .background(Color.white.opacity(0.03), in: .rect(cornerRadius: 6))
-        .onChange(of: batchID) {
-            // Jump to pre-scroll position (shifted right by batchSize steps),
-            // then smoothly slide left over ~5 seconds.
-            scrollPhase = Self.batchSize
-            withAnimation(.linear(duration: 4.8)) {
-                scrollPhase = 0
-            }
-        }
     }
 
     // MARK: - Data Smoothing
@@ -149,16 +135,10 @@ private struct NetworkSparkline: View {
         return result
     }
 
-    // MARK: - Catmull-Rom Spline Path
+    // MARK: - Catmull-Rom Spline
 
-    private func buildCatmullRomPath(samples: [Double], size: CGSize, ceiling: Double, stepX: CGFloat, offsetX: CGFloat) -> Path {
-        let points: [CGPoint] = samples.enumerated().map { i, value in
-            let x = offsetX + CGFloat(i) * stepX
-            let y = size.height - (CGFloat(value / ceiling) * size.height)
-            return CGPoint(x: x, y: y)
-        }
-
-        return Path { path in
+    private func catmullRomPath(through points: [CGPoint]) -> Path {
+        Path { path in
             guard points.count >= 2 else { return }
             path.move(to: points[0])
 
@@ -191,12 +171,11 @@ private struct NetworkSparkline: View {
 
     // MARK: - Fill Path
 
-    private func buildFillPath(from linePath: Path, samples: [Double], size: CGSize, stepX: CGFloat, offsetX: CGFloat) -> Path {
+    private func fillPath(from linePath: Path, points: [CGPoint], height: CGFloat) -> Path {
+        guard let first = points.first, let last = points.last else { return linePath }
         var path = linePath
-        let lastX = offsetX + CGFloat(samples.count - 1) * stepX
-        let firstX = offsetX
-        path.addLine(to: CGPoint(x: lastX, y: size.height))
-        path.addLine(to: CGPoint(x: firstX, y: size.height))
+        path.addLine(to: CGPoint(x: last.x, y: height))
+        path.addLine(to: CGPoint(x: first.x, y: height))
         path.closeSubpath()
         return path
     }

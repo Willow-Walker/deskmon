@@ -116,7 +116,7 @@ struct DashboardView: View {
 
                                 if let stats = server.stats {
                                     SystemStatsView(stats: stats)
-                                    NetworkStatsView(network: stats.network, history: server.displayNetworkHistory, batchID: server.networkBatchID)
+                                    NetworkStatsView(network: stats.network, history: server.networkHistory)
                                 }
 
                                 if !server.containers.isEmpty {
