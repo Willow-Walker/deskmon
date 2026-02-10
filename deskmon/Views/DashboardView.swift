@@ -95,7 +95,11 @@ struct DashboardView: View {
                         }
 
                         if !server.processes.isEmpty {
-                            ProcessListView(processes: server.processes)
+                            ProcessListView(processes: server.processes) { process in
+                                Task {
+                                    _ = try? await serverManager.killProcess(pid: process.pid)
+                                }
+                            }
                         }
                     }
                     .padding(12)

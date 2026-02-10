@@ -164,6 +164,43 @@ final class AgentClient: Sendable {
         return decoded.message ?? action.rawValue
     }
 
+    /// Kill a process by PID.
+    func killProcess(host: String, port: Int, token: String, pid: Int32) async throws -> String {
+        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let url = URL(string: "http://\(trimmedHost):\(port)/processes/\(pid)/kill") else {
+            throw AgentError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 35
+        if !trimmedToken.isEmpty {
+            request.setValue("Bearer \(trimmedToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        Self.log.info("POST \(url.absoluteString)")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw AgentError.httpError(0)
+        }
+
+        if http.statusCode == 401 {
+            throw AgentError.unauthorized
+        }
+
+        let decoded = try JSONDecoder().decode(ControlResponse.self, from: data)
+
+        if decoded.error != nil {
+            throw AgentError.httpError(http.statusCode)
+        }
+
+        return decoded.message ?? "killed"
+    }
+
     /// Restart the agent process.
     func restartAgent(host: String, port: Int, token: String) async throws -> String {
         let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)

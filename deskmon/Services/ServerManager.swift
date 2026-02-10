@@ -162,6 +162,18 @@ final class ServerManager {
         return result
     }
 
+    func killProcess(pid: Int32) async throws -> String {
+        guard let server = selectedServer else { throw AgentError.invalidURL }
+        let result = try await client.killProcess(
+            host: server.host,
+            port: server.port,
+            token: server.token,
+            pid: pid
+        )
+        await refreshData()
+        return result
+    }
+
     func restartAgent() async throws -> String {
         guard let server = selectedServer else { throw AgentError.invalidURL }
         return try await client.restartAgent(
