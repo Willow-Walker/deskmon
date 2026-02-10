@@ -263,7 +263,7 @@ final class AgentClient: Sendable {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 10
+        request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if !trimmedToken.isEmpty {
             request.setValue("Bearer \(trimmedToken)", forHTTPHeaderField: "Authorization")
@@ -379,14 +379,29 @@ final class AgentClient: Sendable {
 
         switch type {
         case "system":
-            guard let payload = try? decoder.decode(SystemEventPayload.self, from: jsonData) else { return nil }
-            return .system(payload.system, payload.processes)
+            do {
+                let payload = try decoder.decode(SystemEventPayload.self, from: jsonData)
+                return .system(payload.system, payload.processes)
+            } catch {
+                log.error("SSE decode error (system): \(error)")
+                return nil
+            }
         case "docker":
-            guard let containers = try? decoder.decode([DockerContainer].self, from: jsonData) else { return nil }
-            return .docker(containers)
+            do {
+                let containers = try decoder.decode([DockerContainer].self, from: jsonData)
+                return .docker(containers)
+            } catch {
+                log.error("SSE decode error (docker): \(error)")
+                return nil
+            }
         case "services":
-            guard let services = try? decoder.decode([ServiceInfo].self, from: jsonData) else { return nil }
-            return .services(services)
+            do {
+                let services = try decoder.decode([ServiceInfo].self, from: jsonData)
+                return .services(services)
+            } catch {
+                log.error("SSE decode error (services): \(error)")
+                return nil
+            }
         default:
             return nil
         }

@@ -141,6 +141,9 @@ final class ServerManager {
             server.appendNetworkSample(response.system.network)
             server.status = Self.deriveStatus(from: response.system)
         }
+        if server.id == selectedServerID {
+            isConnected = true
+        }
     }
 
     // MARK: - Server Management
