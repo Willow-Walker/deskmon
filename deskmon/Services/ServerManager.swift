@@ -127,9 +127,12 @@ final class ServerManager {
                             withAnimation(.easeInOut(duration: 0.4)) {
                                 server.stats = stats
                                 server.processes = processes
-                                server.appendNetworkSample(stats.network)
                                 server.status = Self.deriveStatus(from: stats)
                             }
+                            // Update network history outside animation —
+                            // Canvas can't animate array changes; the sparkline
+                            // handles its own scroll animation via networkSampleID.
+                            server.appendNetworkSample(stats.network)
                             if serverID == selectedServerID {
                                 isConnected = true
                             }
@@ -143,6 +146,7 @@ final class ServerManager {
                             withAnimation(.easeInOut(duration: 0.5)) {
                                 server.services = services
                             }
+                            server.lastServicesUpdate = Date()
 
                         case .keepalive:
                             break

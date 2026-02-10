@@ -28,7 +28,16 @@ final class ServerInfo: Identifiable {
     var connectionPhase: ConnectionPhase = .connecting
     var hasConnectedOnce = false
 
-    static let maxNetworkSamples = 60
+    /// Incremented each time a network sample is appended; drives sparkline scroll animation.
+    var networkSampleID: UInt64 = 0
+
+    /// Timestamp of the last services SSE event; drives the refresh countdown.
+    var lastServicesUpdate: Date?
+
+    /// Buffer holds 1 extra sample so the sparkline can animate the scroll.
+    static let maxNetworkSamples = 61
+    /// How many samples are visible in the graph at once.
+    static let visibleNetworkSamples = 60
 
     init(id: UUID = UUID(), name: String, host: String, port: Int = 7654, token: String = "") {
         self.id = id
@@ -44,5 +53,6 @@ final class ServerInfo: Identifiable {
         if networkHistory.count > Self.maxNetworkSamples {
             networkHistory.removeFirst(networkHistory.count - Self.maxNetworkSamples)
         }
+        networkSampleID &+= 1
     }
 }

@@ -283,7 +283,7 @@ struct MainDashboardView: View {
                         )
                     }
 
-                    networkCard(stats: stats, history: server.networkHistory)
+                    networkCard(stats: stats, history: server.networkHistory, sampleID: server.networkSampleID)
 
                     if !server.containers.isEmpty {
                         ContainerTableView(
@@ -368,7 +368,7 @@ struct MainDashboardView: View {
             ))
         } else {
             ScrollView {
-                ServicesGridView(services: server.services) { service in
+                ServicesGridView(services: server.services, lastUpdate: server.lastServicesUpdate) { service in
                     withAnimation(.smooth(duration: 0.25)) {
                         selectedService = service
                     }
@@ -423,8 +423,8 @@ struct MainDashboardView: View {
 
     // MARK: - Network
 
-    private func networkCard(stats: ServerStats, history: [NetworkSample]) -> some View {
-        NetworkStatsView(network: stats.network, history: history)
+    private func networkCard(stats: ServerStats, history: [NetworkSample], sampleID: UInt64) -> some View {
+        NetworkStatsView(network: stats.network, history: history, sampleID: sampleID)
     }
 
     // MARK: - Settings Popover

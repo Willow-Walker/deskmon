@@ -3,6 +3,7 @@ import SwiftUI
 struct NetworkStatsView: View {
     let network: NetworkStats
     let history: [NetworkSample]
+    let sampleID: UInt64
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -39,7 +40,7 @@ struct NetworkStatsView: View {
             }
 
             // Sparkline graph
-            NetworkSparkline(history: history)
+            NetworkSparkline(history: history, sampleID: sampleID)
                 .frame(height: 48)
         }
         .padding(10)
@@ -51,70 +52,84 @@ struct NetworkStatsView: View {
 
 private struct NetworkSparkline: View {
     let history: [NetworkSample]
+    let sampleID: UInt64
+
+    /// Animated 1→0 progress that drives the horizontal slide.
+    /// At 1 the graph is shifted right by one step (pre-scroll position);
+    /// at 0 it shows the final position with the new point visible.
+    @State private var scrollPhase: CGFloat = 0
 
     var body: some View {
-        Canvas { context, size in
-            let samples = history
-            guard samples.count > 1 else {
-                // Draw empty baseline
-                let baseline = Path { p in
-                    p.move(to: CGPoint(x: 0, y: size.height))
-                    p.addLine(to: CGPoint(x: size.width, y: size.height))
+        GeometryReader { geo in
+            let visible = ServerInfo.visibleNetworkSamples // 60
+            let stepX = geo.size.width / CGFloat(visible - 1)
+
+            Canvas { context, size in
+                let samples = history
+                guard samples.count > 1 else {
+                    let baseline = Path { p in
+                        p.move(to: CGPoint(x: 0, y: size.height))
+                        p.addLine(to: CGPoint(x: size.width, y: size.height))
+                    }
+                    context.stroke(baseline, with: .color(.secondary.opacity(0.15)), lineWidth: 0.5)
+                    return
                 }
-                context.stroke(baseline, with: .color(.secondary.opacity(0.15)), lineWidth: 0.5)
-                return
+
+                let dlSmoothed = smoothed(samples.map(\.download))
+                let ulSmoothed = smoothed(samples.map(\.upload))
+
+                let peak = max(dlSmoothed.max() ?? 0, ulSmoothed.max() ?? 0)
+                let ceiling = peak > 0 ? peak * 1.15 : 1
+
+                // Position each sample at index * stepX.
+                // scrollPhase shifts everything right so the incoming point
+                // slides in from the right edge.
+                let baseOffset = CGFloat(visible - samples.count) * stepX
+                let xShift = scrollPhase * stepX
+                let offsetX = baseOffset + xShift
+
+                // Download
+                let dlPath = buildCatmullRomPath(
+                    samples: dlSmoothed, size: size, ceiling: ceiling,
+                    stepX: stepX, offsetX: offsetX
+                )
+                let dlFill = buildFillPath(
+                    from: dlPath, samples: dlSmoothed,
+                    size: size, stepX: stepX, offsetX: offsetX
+                )
+                context.fill(dlFill, with: .linearGradient(
+                    Gradient(colors: [Theme.download.opacity(0.3), Theme.download.opacity(0.02)]),
+                    startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)
+                ))
+                context.stroke(dlPath, with: .color(Theme.download.opacity(0.8)),
+                               style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+
+                // Upload
+                let ulPath = buildCatmullRomPath(
+                    samples: ulSmoothed, size: size, ceiling: ceiling,
+                    stepX: stepX, offsetX: offsetX
+                )
+                let ulFill = buildFillPath(
+                    from: ulPath, samples: ulSmoothed,
+                    size: size, stepX: stepX, offsetX: offsetX
+                )
+                context.fill(ulFill, with: .linearGradient(
+                    Gradient(colors: [Theme.upload.opacity(0.25), Theme.upload.opacity(0.02)]),
+                    startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)
+                ))
+                context.stroke(ulPath, with: .color(Theme.upload.opacity(0.7)),
+                               style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
             }
-
-            // Smooth raw data with a 3-sample weighted moving average
-            let dlSmoothed = smoothed(samples.map(\.download))
-            let ulSmoothed = smoothed(samples.map(\.upload))
-
-            // Find the peak value across both channels for scaling
-            let peak = max(
-                dlSmoothed.max() ?? 0,
-                ulSmoothed.max() ?? 0
-            )
-            let ceiling = peak > 0 ? peak * 1.15 : 1 // 15% headroom
-
-            let stepX = size.width / CGFloat(ServerInfo.maxNetworkSamples - 1)
-            let offsetX = CGFloat(ServerInfo.maxNetworkSamples - samples.count) * stepX
-
-            // Draw download (filled area)
-            let dlPath = buildCatmullRomPath(
-                samples: dlSmoothed, size: size, ceiling: ceiling,
-                stepX: stepX, offsetX: offsetX
-            )
-            let dlFill = buildFillPath(
-                from: dlPath, samples: dlSmoothed,
-                size: size, stepX: stepX, offsetX: offsetX
-            )
-
-            context.fill(dlFill, with: .linearGradient(
-                Gradient(colors: [Theme.download.opacity(0.3), Theme.download.opacity(0.02)]),
-                startPoint: CGPoint(x: 0, y: 0),
-                endPoint: CGPoint(x: 0, y: size.height)
-            ))
-            context.stroke(dlPath, with: .color(Theme.download.opacity(0.8)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-
-            // Draw upload (filled area)
-            let ulPath = buildCatmullRomPath(
-                samples: ulSmoothed, size: size, ceiling: ceiling,
-                stepX: stepX, offsetX: offsetX
-            )
-            let ulFill = buildFillPath(
-                from: ulPath, samples: ulSmoothed,
-                size: size, stepX: stepX, offsetX: offsetX
-            )
-
-            context.fill(ulFill, with: .linearGradient(
-                Gradient(colors: [Theme.upload.opacity(0.25), Theme.upload.opacity(0.02)]),
-                startPoint: CGPoint(x: 0, y: 0),
-                endPoint: CGPoint(x: 0, y: size.height)
-            ))
-            context.stroke(ulPath, with: .color(Theme.upload.opacity(0.7)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
         }
         .clipShape(.rect(cornerRadius: 6))
         .background(Color.white.opacity(0.03), in: .rect(cornerRadius: 6))
+        .onChange(of: sampleID) {
+            // Jump to "pre-scroll" position, then animate the slide.
+            scrollPhase = 1.0
+            withAnimation(.linear(duration: 0.9)) {
+                scrollPhase = 0.0
+            }
+        }
     }
 
     // MARK: - Data Smoothing
@@ -133,8 +148,6 @@ private struct NetworkSparkline: View {
 
     // MARK: - Catmull-Rom Spline Path
 
-    /// Builds a smooth Catmull-Rom spline through data points.
-    /// Tension 0.5 gives a centripetal Catmull-Rom (no cusps, no self-intersections).
     private func buildCatmullRomPath(samples: [Double], size: CGSize, ceiling: Double, stepX: CGFloat, offsetX: CGFloat) -> Path {
         let points: [CGPoint] = samples.enumerated().map { i, value in
             let x = offsetX + CGFloat(i) * stepX

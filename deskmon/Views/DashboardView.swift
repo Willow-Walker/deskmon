@@ -116,7 +116,7 @@ struct DashboardView: View {
 
                                 if let stats = server.stats {
                                     SystemStatsView(stats: stats)
-                                    NetworkStatsView(network: stats.network, history: server.networkHistory)
+                                    NetworkStatsView(network: stats.network, history: server.networkHistory, sampleID: server.networkSampleID)
                                 }
 
                                 if !server.containers.isEmpty {
@@ -146,7 +146,7 @@ struct DashboardView: View {
 
                     case .services:
                         ScrollView {
-                            ServicesGridView(services: server.services) { service in
+                            ServicesGridView(services: server.services, lastUpdate: server.lastServicesUpdate) { service in
                                 withAnimation(.smooth(duration: 0.3)) {
                                     selectedService = service
                                 }
