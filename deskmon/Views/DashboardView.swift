@@ -80,7 +80,7 @@ struct DashboardView: View {
 
                         if let stats = server.stats {
                             SystemStatsView(stats: stats)
-                            NetworkStatsView(network: stats.network)
+                            NetworkStatsView(network: stats.network, history: server.networkHistory)
                         }
 
                         if !server.containers.isEmpty {
@@ -89,6 +89,10 @@ struct DashboardView: View {
                                     selectedContainer = container
                                 }
                             }
+                        }
+
+                        if !server.processes.isEmpty {
+                            ProcessListView(processes: server.processes)
                         }
                     }
                     .padding(12)
@@ -157,51 +161,131 @@ struct DashboardView: View {
             .padding(.vertical, 12)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    SectionHeaderView(title: "Servers", count: serverManager.servers.count)
+                VStack(alignment: .leading, spacing: 18) {
+                    // --- Servers ---
+                    settingsSectionHeader("Servers")
 
-                    VStack(spacing: 4) {
-                        ForEach(serverManager.servers) { server in
+                    VStack(spacing: 0) {
+                        ForEach(Array(serverManager.servers.enumerated()), id: \.element.id) { index, server in
                             serverSettingsRow(server)
+                            if index < serverManager.servers.count - 1 {
+                                Divider().padding(.leading, 28)
+                            }
+                        }
+
+                        if !serverManager.servers.isEmpty {
+                            Divider().padding(.leading, 12)
+                        }
+
+                        Button { showingAddServer = true } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundStyle(Theme.accent)
+                                Text("Add Server")
+                            }
+                            .font(.callout)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .cardStyle(cornerRadius: 10)
+
+                    // --- Agent ---
+                    settingsSectionHeader("Agent")
+
+                    VStack(spacing: 0) {
+                        groupedRow {
+                            Toggle("Polling", isOn: Binding(
+                                get: { serverManager.isPolling },
+                                set: { newValue in
+                                    if newValue { serverManager.startPolling() }
+                                    else { serverManager.stopPolling() }
+                                }
+                            ))
+                            .toggleStyle(.switch)
+                            .tint(Theme.accent)
+                        }
+
+                        Divider().padding(.leading, 12)
+
+                        groupedRow {
+                            @Bindable var manager = serverManager
+                            Picker("Refresh", selection: $manager.pollingInterval) {
+                                ForEach(ServerManager.intervalOptions, id: \.value) { option in
+                                    Text(option.label).tag(option.value)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .tint(.secondary)
+                        }
+
+                        Divider().padding(.leading, 12)
+
+                        Button {
+                            serverManager.stopPolling()
+                            serverManager.startPolling()
+                        } label: {
+                            HStack {
+                                Text("Restart Polling")
+                                Spacer()
+                                Image(systemName: "arrow.clockwise")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.callout)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .cardStyle(cornerRadius: 10)
+
+                    // --- About ---
+                    settingsSectionHeader("About")
+
+                    VStack(spacing: 0) {
+                        groupedRow {
+                            HStack {
+                                Text("Version")
+                                Spacer()
+                                Text("1.0.0")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Divider().padding(.leading, 12)
+
+                        groupedRow {
+                            HStack {
+                                Text("App")
+                                Spacer()
+                                Text("Deskmon")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
-
-                    Button { showingAddServer = true } label: {
-                        Label("Add Server", systemImage: "plus")
-                            .font(.callout)
-                    }
-                    .buttonStyle(.dark)
-
-                    Divider()
-
-                    SectionHeaderView(title: "Agent")
-
-                    agentControls
-
-                    Divider()
-
-                    SectionHeaderView(title: "General")
-
-                    VStack(spacing: 2) {
-                        settingsRow("Version", value: "1.0.0")
-                    }
-                    .padding(.horizontal, 4)
-
-                    Divider()
-
-                    VStack(spacing: 4) {
-                        Text("Deskmon")
-                            .font(.callout.weight(.medium))
-                        Text("Server monitoring for your menu bar")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 8)
+                    .cardStyle(cornerRadius: 10)
                 }
-                .padding(12)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 16)
             }
         }
+    }
+
+    private func settingsSectionHeader(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.leading, 4)
+    }
+
+    @ViewBuilder
+    private func groupedRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .font(.callout)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
     }
 
     // MARK: - Inline Edit Panel
@@ -332,48 +416,6 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Agent Controls
-
-    private var agentControls: some View {
-        @Bindable var manager = serverManager
-
-        return VStack(spacing: 10) {
-            Toggle("Polling", isOn: Binding(
-                get: { serverManager.isPolling },
-                set: { newValue in
-                    if newValue { serverManager.startPolling() }
-                    else { serverManager.stopPolling() }
-                }
-            ))
-            .toggleStyle(.switch)
-            .tint(Theme.accent)
-            .font(.callout)
-
-            Picker("Refresh Interval", selection: $manager.pollingInterval) {
-                ForEach(ServerManager.intervalOptions, id: \.value) { option in
-                    Text(option.label).tag(option.value)
-                }
-            }
-            .pickerStyle(.menu)
-            .font(.callout)
-
-            HStack(spacing: 8) {
-                // TODO: Send POST /restart to the agent when real networking is wired up
-                Button {
-                    serverManager.stopPolling()
-                    serverManager.startPolling()
-                } label: {
-                    Label("Restart Agent", systemImage: "arrow.clockwise")
-                        .font(.callout)
-                }
-                .buttonStyle(.dark)
-
-                Spacer()
-            }
-        }
-        .padding(.horizontal, 4)
-    }
-
     // MARK: - Container Detail Panel
 
     private var liveSelectedContainer: DockerContainer? {
@@ -467,20 +509,8 @@ struct DashboardView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .cardStyle(cornerRadius: 8)
-    }
-
-    private func settingsRow(_ label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(.callout)
-            Spacer()
-            Text(value)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
     private func editField(_ label: String, text: Binding<String>, prompt: String) -> some View {

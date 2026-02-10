@@ -7,6 +7,7 @@ import os
 struct AgentStatsResponse: Codable, Sendable {
     let system: ServerStats
     let containers: [DockerContainer]
+    let processes: [ProcessInfo]?
 }
 
 // MARK: - Errors

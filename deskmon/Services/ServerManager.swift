@@ -99,6 +99,8 @@ final class ServerManager {
                     case .success(let response):
                         server.stats = response.system
                         server.containers = response.containers
+                        server.processes = response.processes ?? []
+                        server.appendNetworkSample(response.system.network)
                         server.status = Self.deriveStatus(from: response.system)
                     case .unauthorized:
                         server.status = .unauthorized

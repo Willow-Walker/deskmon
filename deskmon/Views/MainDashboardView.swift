@@ -232,7 +232,7 @@ struct MainDashboardView: View {
                         )
                     }
 
-                    networkCard(stats: stats)
+                    networkCard(stats: stats, history: server.networkHistory)
 
                     if !server.containers.isEmpty {
                         ContainerTableView(
@@ -298,42 +298,8 @@ struct MainDashboardView: View {
 
     // MARK: - Network
 
-    private func networkCard(stats: ServerStats) -> some View {
-        HStack(spacing: 16) {
-            HStack(spacing: 10) {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(Theme.download)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Download")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(ByteFormatter.formatSpeed(stats.network.downloadBytesPerSec))
-                        .font(.title3.monospacedDigit().weight(.medium))
-                        .contentTransition(.numericText())
-                }
-            }
-
-            Spacer()
-
-            HStack(spacing: 10) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(Theme.upload)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Upload")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(ByteFormatter.formatSpeed(stats.network.uploadBytesPerSec))
-                        .font(.title3.monospacedDigit().weight(.medium))
-                        .contentTransition(.numericText())
-                }
-            }
-
-            Spacer()
-        }
-        .padding(14)
-        .cardStyle()
+    private func networkCard(stats: ServerStats, history: [NetworkSample]) -> some View {
+        NetworkStatsView(network: stats.network, history: history)
     }
 
     // MARK: - Settings Popover
