@@ -83,13 +83,13 @@ struct ServicesGridView: View {
             }
         }
         .onAppear { bookmarks = BookmarkStore.load() }
-        .popover(isPresented: $showingAddBookmark) {
+        .sheet(isPresented: $showingAddBookmark) {
             AddBookmarkSheet { bookmark in
                 BookmarkStore.add(bookmark)
                 bookmarks = BookmarkStore.load()
             }
         }
-        .popover(item: $editingBookmark) { bookmark in
+        .sheet(item: $editingBookmark) { bookmark in
             AddBookmarkSheet(editingBookmark: bookmark) { updated in
                 BookmarkStore.update(updated)
                 bookmarks = BookmarkStore.load()
