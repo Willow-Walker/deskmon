@@ -275,6 +275,18 @@ final class ServerManager {
         )
     }
 
+    func performServiceAction(pluginId: String, action: String, params: [String: Any] = [:]) async throws -> String {
+        guard let server = selectedServer else { throw AgentError.invalidURL }
+        return try await client.performServiceAction(
+            host: server.host,
+            port: server.port,
+            token: server.token,
+            pluginId: pluginId,
+            action: action,
+            params: params
+        )
+    }
+
     /// Manually fetch latest stats for the selected server (used after actions that change agent state).
     func refreshStats() async {
         guard let server = selectedServer else { return }

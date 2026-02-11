@@ -7,6 +7,7 @@ struct PiHoleDashboardView: View {
     @State private var piholePassword = ""
     @State private var isAuthenticating = false
     @State private var authError: String?
+    @State private var isTogglingBlocking = false
 
     private var accent: Color { serviceAccent(for: "pihole") }
 
@@ -18,6 +19,8 @@ struct PiHoleDashboardView: View {
     private var queriesForwarded: Int64 { service.stats["queriesForwarded"]?.intValue ?? 0 }
     private var queriesCached: Int64 { service.stats["queriesCached"]?.intValue ?? 0 }
     private var uniqueDomains: Int64 { service.stats["uniqueDomains"]?.intValue ?? 0 }
+    private var blocking: String { service.stats["blocking"]?.stringValue ?? "enabled" }
+    private var isBlocking: Bool { blocking != "disabled" }
     private var piStatus: String { service.stats["status"]?.stringValue ?? service.status }
     private var version: String { service.stats["version"]?.stringValue ?? "" }
     private var authRequired: Bool { service.stats["authRequired"]?.boolValue == true }
@@ -30,6 +33,7 @@ struct PiHoleDashboardView: View {
                     authRequiredCard
                 } else {
                     statsGrid
+                    blockingControlCard
                     breakdownCard
                     infoCard
                 }
@@ -191,6 +195,59 @@ struct PiHoleDashboardView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
         .cardStyle(cornerRadius: 12)
+    }
+
+    // MARK: - Blocking Control
+
+    private var blockingControlCard: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("DNS Blocking")
+                    .font(.callout.weight(.medium))
+                Text(isBlocking ? "Blocking ads and trackers" : "Blocking is disabled")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if isTogglingBlocking {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Button {
+                    toggleBlocking()
+                } label: {
+                    Text(isBlocking ? "Disable" : "Enable")
+                        .font(.caption.weight(.medium))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(isBlocking ? Theme.critical.opacity(0.8) : Theme.healthy)
+                .controlSize(.small)
+            }
+        }
+        .padding(14)
+        .cardStyle(cornerRadius: 12)
+    }
+
+    private func toggleBlocking() {
+        isTogglingBlocking = true
+
+        Task {
+            do {
+                _ = try await serverManager.performServiceAction(
+                    pluginId: "pihole",
+                    action: "setBlocking",
+                    params: ["enabled": !isBlocking]
+                )
+                // Wait for agent to collect updated stats, then refresh
+                try? await Task.sleep(for: .seconds(2))
+                await serverManager.refreshStats()
+            } catch {
+                // Silently handle — the SSE stream will update the UI
+            }
+            isTogglingBlocking = false
+        }
     }
 
     // MARK: - Breakdown
