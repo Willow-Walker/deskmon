@@ -1,24 +1,4 @@
 import SwiftUI
-import AppKit
-
-// MARK: - Subtle Glass Background
-
-struct SubtleGlassBackground: NSViewRepresentable {
-    var opacity: Double = 0.15
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = .hudWindow
-        view.blendingMode = .behindWindow
-        view.state = .active
-        view.alphaValue = CGFloat(opacity)
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.alphaValue = CGFloat(opacity)
-    }
-}
 
 enum Theme {
     // MARK: - Brand
@@ -41,21 +21,6 @@ enum Theme {
 
     static let disk = Color(red: 0.659, green: 0.333, blue: 0.969)
     static let diskLight = Color(red: 0.753, green: 0.518, blue: 0.988)
-
-    // MARK: - Gradients
-
-    static let cpuGradient = LinearGradient(
-        colors: [cpu, cpuLight],
-        startPoint: .leading, endPoint: .trailing
-    )
-    static let memoryGradient = LinearGradient(
-        colors: [memory, memoryLight],
-        startPoint: .leading, endPoint: .trailing
-    )
-    static let diskGradient = LinearGradient(
-        colors: [disk, diskLight],
-        startPoint: .leading, endPoint: .trailing
-    )
 
     // MARK: - Network
 

@@ -2,353 +2,282 @@
 
 > **Desk**top **Mon**itoring — your servers, at a glance.
 
-**Native macOS menu bar app for monitoring your home servers.**
+A native macOS menu bar app for monitoring home servers. No browser tabs, no Grafana, no complexity. Just click the menu bar and see everything.
 
-A lightweight, privacy-first server monitoring tool designed for homelab enthusiasts. See your server stats at a glance without opening a browser or setting up complex monitoring stacks.
-
-![Status](https://img.shields.io/badge/status-in%20development-yellow)
+![Status](https://img.shields.io/badge/status-MVP-green)
 ![Platform](https://img.shields.io/badge/platform-macOS-blue)
-![License](https://img.shields.io/badge/license-proprietary-red)
+![License](https://img.shields.io/badge/license-MIT-brightgreen)
+![Swift](https://img.shields.io/badge/Swift-6%2B-orange)
+![Agent](https://img.shields.io/badge/agent-Go-00ADD8)
+
+<!-- Add screenshots here: ![Screenshot](docs/screenshots/dashboard.png) -->
 
 ---
 
-## Vision
+## What It Does
 
-**The problem:** You run a home server (pihole, file storage, Plex, docker containers). Checking on it means SSH-ing in, opening a browser to various dashboards, or setting up heavyweight solutions like Grafana + Prometheus.
+Install a lightweight agent on your server, point the macOS app at it, and you get live stats in your menu bar. That's it.
 
-**The solution:** A native macOS menu bar app that shows you everything at a glance. One click. No browser. No complexity.
-
----
-
-## Target Audience
-
-- **Homelab enthusiasts** running personal servers
-- **Developers** with local dev servers or VMs
-- **Self-hosters** running pihole, Plex, Jellyfin, Home Assistant
-- **Mac users** who want native UX, not Electron bloat
-- **Privacy-conscious** users who don't want cloud monitoring
-
-### User Persona
-
-> "I run a Linux server at home with pihole, some docker containers, and file storage. I use my Mac for everything else. I just want to glance up at my menu bar and know my server is healthy without context-switching."
-
----
-
-## Core Features
-
-### Menu Bar App (macOS)
-
-- **Status at a glance**: Green/yellow/red indicator in menu bar
-- **Quick dropdown**: Click to see live stats
-- **Multi-server support**: Monitor multiple machines
-- **Native Swift/SwiftUI**: Fast, lightweight, no Electron
-- **Widgets**: Desktop and notification center widgets
-- **Alerts**: Get notified when thresholds are exceeded
-
-### Agent (Linux/BSD)
-
-- **Tiny footprint**: Single binary, <5MB, minimal CPU usage
-- **Zero config**: Works out of the box
-- **Open source**: Inspect what runs on your server
-- **Secure**: Binds to local network only, optional auth token
-
----
-
-## Stats & Metrics
-
-### System (Always Available)
-
-| Metric | Description |
-|--------|-------------|
-| CPU | Usage percentage, per-core breakdown |
-| Memory | Used/total RAM, swap usage |
-| Disk | Usage per mount, read/write speeds |
-| Network | Upload/download speeds, total transferred |
-| Load | 1/5/15 minute load averages |
-| Uptime | How long the server has been running |
-| Temperature | CPU/GPU temps (where available) |
-
-### Docker Containers
-
-| Metric | Description |
-|--------|-------------|
-| Status | Running, stopped, restarting |
-| CPU | Per-container CPU usage |
-| Memory | Usage, limit, percentage |
-| Network | RX/TX bytes (cumulative) |
-| Disk I/O | Read/write bytes (cumulative) |
-| PIDs | Process count |
-| Uptime | Time since container start |
-
-<!-- TODO: Ports (exposed port mappings), health check status, restart count -->
-
-### App Integrations (Planned)
-
-| App | Metrics |
-|-----|---------|
-| **Pihole** | Queries today, blocked %, top domains |
-| **Plex** | Active streams, library stats |
-| **Jellyfin** | Active streams, users |
-| **Home Assistant** | Entity count, automations |
-| **AdGuard Home** | Similar to Pihole |
-| **Portainer** | Stacks, containers |
-| **Proxmox** | VMs, resource usage |
-| **TrueNAS** | Pools, disk health |
-
----
-
-## Design Philosophy
-
-### Native First
-Built with Swift and SwiftUI. Feels like a first-party Apple app. Follows macOS design conventions. Plays nice with system dark mode, accent colors, and accessibility features.
-
-### Privacy First
-- All data stays on your network
-- No cloud, no accounts, no telemetry
-- Agent source code is open for inspection
-- Works completely offline
-
-### Simplicity First
-- Zero configuration for basic usage
-- Install agent → add server IP → done
-- Power features available but not required
-
----
-
-## Pricing Model
-
-### Free Tier
-- 1 server
-- Core system stats
-- 60-second refresh interval
-
-### Pro ($5/month or $80 lifetime)
-- Unlimited servers
-- Docker container stats
-- App integrations (Pihole, Plex, etc.)
-- 5-second refresh interval
-- Desktop widgets
-- Custom alerts
-- Priority support
+- **System stats** — CPU, memory, disk, network speed with live sparkline graph
+- **Docker containers** — status, CPU, memory, network I/O, disk I/O per container
+- **Container actions** — start, stop, restart containers from your Mac
+- **Process management** — top processes by memory usage, kill by PID
+- **Service dashboards** — Pi-hole, Traefik, Nginx with full stats and controls
+- **Service bookmarks** — quick-launch for any self-hosted service (n8n, Homarr, Dokploy, etc.)
+- **Multi-server** — monitor multiple machines from one app
+- **Live streaming** — SSE connection with 1s system / 5s Docker / 10s services refresh
 
 ---
 
 ## Architecture
 
-Deskmon uses a simple client-agent architecture. There is no intermediate backend or cloud service.
+No cloud. No accounts. No telemetry. The app talks directly to your agent over your local network.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     Your Mac                            │
-│  ┌───────────────────────────────────────────────────┐ │
-│  │            macOS Menu Bar App                     │ │
-│  │              (Pure SwiftUI)                       │ │
-│  │                                                   │ │
-│  │  - Stores server list (UserDefaults/SwiftData)   │ │
-│  │  - Streams live stats via SSE                    │ │
-│  │  - Renders stats in native UI                    │ │
-│  │  - No local backend process needed               │ │
-│  └───────────────────────────────────────────────────┘ │
-└───────────────────────┬─────────────────────────────────┘
-                        │ HTTP/JSON over LAN
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                   Your Server(s)                        │
-│  ┌───────────────────────────────────────────────────┐ │
-│  │              deskmon-agent (Go)                   │ │
-│  │                                                   │ │
-│  │  - Collects system stats (CPU, RAM, disk, net)   │ │
-│  │  - Queries Docker API for container stats        │ │
-│  │  - Queries app APIs (Pihole, Plex, etc.)         │ │
-│  │  - Serves JSON on port 7654                      │ │
-│  │  - THIS IS THE BACKEND                           │ │
-│  └───────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Key Points
-
-- **The agent IS the backend.** It runs on your server, collects data, and serves it via HTTP.
-- **The macOS app is a pure client.** It's 100% SwiftUI with no embedded backend or local server process.
-- **No cloud, no relay.** The app talks directly to your agent(s) over your local network.
-- **Multiple servers?** The app polls each agent independently.
-
-### Communication Flow
-
-1. Agent runs on server, binds to `0.0.0.0:7654`
-2. macOS app stores list of server IPs in local storage
-3. App connects to each agent via SSE (`GET /stats/stream`) for live updates
-4. System stats stream every 1s, Docker every 5s, services every 10s
-5. Auth token header required for all endpoints
-
-### Agent Endpoints
-
-See [`docs/agent-api-contract.md`](docs/agent-api-contract.md) for the full API contract.
-
-```
-GET /health          -> { "status": "ok" }
-GET /stats           -> Full system + container + process + service stats
-GET /stats/stream    -> SSE stream (system 1s, docker 5s, services 10s)
+┌──────────────────────────────────────────┐
+│              Your Mac                     │
+│                                          │
+│   Deskmon (SwiftUI menu bar app)         │
+│   - Streams live stats via SSE           │
+│   - Renders native UI                    │
+│   - Stores config in UserDefaults        │
+│                                          │
+└──────────────────┬───────────────────────┘
+                   │ HTTP/SSE over LAN
+                   ▼
+┌──────────────────────────────────────────┐
+│            Your Server(s)                 │
+│                                          │
+│   deskmon-agent (Go binary)              │
+│   - Collects system stats (gopsutil)     │
+│   - Queries Docker API                   │
+│   - Auto-detects services                │
+│   - Serves JSON on port 7654            │
+│                                          │
+└──────────────────────────────────────────┘
 ```
 
 ---
 
-## UI Mockup
+## Getting Started
 
+### 1. Install the agent on your server
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/neur0map/deskmon-agent/main/scripts/install.sh | bash
 ```
-┌──────────────────────────────────────┐
-│ prowl-server               12d  │
-├──────────────────────────────────────┤
-│                                      │
-│  CPU   ████████░░░░░░░░  48%        │
-│  RAM   ██████████████░░  87%  14GB  │
-│  Disk  ████████░░░░░░░░  52%  240G  │
-│  Net   ↓ 12.4 MB/s   ↑ 1.2 MB/s    │
-│                                      │
-├──────────────────────────────────────┤
-│  Containers (6)                   │
-│                                      │
-│   ● pihole         0.5%     128MB   │
-│   ● plex          12.3%     2.1GB   │
-│   ● homebridge     0.1%      64MB   │
-│   ● jellyfin       2.1%     512MB   │
-│   ● homeassistant  1.8%     384MB   │
-│   ○ nginx         stopped           │
-│                                      │
-├──────────────────────────────────────┤
-│  Pihole                           │
-│   Queries: 45.6k   Blocked: 27.3%   │
-│   Status: Enabled                    │
-│                                      │
-├──────────────────────────────────────┤
-│  Settings    Add Server        │
-└──────────────────────────────────────┘
+
+Or build from source:
+
+```bash
+git clone https://github.com/neur0map/deskmon-agent.git
+cd deskmon-agent
+make build
+sudo make install
 ```
+
+The agent runs as a systemd service on port 7654. See the [agent repo](https://github.com/neur0map/deskmon-agent) for configuration options.
+
+### 2. Install the macOS app
+
+**Option A: Download** (recommended)
+- Signed, notarized DMG from [deskmon.dev](https://deskmon.dev) — coming soon
+
+**Option B: Build from source**
+
+```bash
+git clone https://github.com/neur0map/deskmon.git
+cd deskmon
+open deskmon.xcodeproj
+```
+
+Change the signing team to your Apple ID, then build and run (Cmd+R).
+
+### 3. Add your server
+
+Click the menu bar icon, go to Settings, and add your server's IP address and auth token.
 
 ---
 
-## Roadmap
+## Features
 
-### Phase 1: MVP (Weeks 1-5)
-- [ ] Agent: Core system stats (CPU, RAM, disk, network)
-- [ ] Agent: Docker container stats
-- [ ] Agent: HTTP server with JSON API
-- [ ] Agent: Install script (curl | bash)
-- [x] macOS: Menu bar icon with status color
-- [x] macOS: Popover with live stats (380x600 menu bar popover)
-- [x] macOS: Full window with sidebar + detail panel (Cmd+1)
-- [x] macOS: Add/edit/remove servers
-- [x] macOS: Settings (SSE live connection, restart agent)
-- [x] macOS: Docker container detail panel (CPU, memory, network, disk I/O)
-- [x] macOS: OLED dark theme with orange accent
-- [x] macOS: API contract defined ([docs/agent-api-contract.md](docs/agent-api-contract.md))
+### System Overview
 
-### Phase 2: Integrations (Weeks 6-8)
-- [x] Agent: SSE streaming (replaces HTTP polling)
-- [x] Agent: Service auto-detection (Pi-hole, Traefik, Nginx)
-- [x] Agent: Container actions (start/stop/restart)
-- [x] Agent: Process management (kill by PID)
-- [x] Agent: Top processes list
-- [x] macOS: Live SSE connection with auto-reconnect
-- [x] macOS: Container actions from UI
-- [x] macOS: Process list with kill support
-- [x] macOS: Service dashboards (Pi-hole, Traefik)
-- [ ] Agent: Pihole integration
-- [ ] Agent: Plex integration
-- [ ] Agent: Config file for integrations
-- [ ] macOS: Integration UI
-- [ ] macOS: Desktop widgets
+Live CPU, memory, and disk usage with smooth animated bars. Network speed displayed as a 60-second scrolling sparkline graph with Catmull-Rom interpolation.
 
-### Phase 3: Polish (Weeks 9-10)
-- [ ] macOS: Alert thresholds & notifications
-- [ ] macOS: Keyboard shortcuts
-- [ ] Landing page & docs
-- [ ] Payment integration (Gumroad/Paddle)
-- [ ] TestFlight beta
+### Docker Containers
 
-### Phase 4: Expansion (Future)
-- [ ] More integrations (Jellyfin, Home Assistant, Proxmox)
-- [ ] iOS companion app
-- [ ] Historical data & graphs
-- [ ] Multi-user / family sharing
+Card-style container list with color-coded status strips. Per-container CPU, memory, network I/O, and disk I/O. Start, stop, and restart containers directly from the app. Running containers sorted first, stopped containers dimmed.
+
+### Service Dashboards
+
+Auto-detected service integrations with dedicated dashboards:
+
+| Service | Stats | Controls |
+|---------|-------|----------|
+| **Pi-hole** | Queries, blocked %, forwarded, cached, unique domains, clients | Enable/disable blocking |
+| **Traefik** | HTTP/TCP/UDP routers, services, middleware, warnings | — |
+| **Nginx** | Active connections, requests/sec, reading/writing/waiting | — |
+
+Custom URL overrides let you open any service in your browser. Bookmark cards let you add quick links to services the agent doesn't detect (n8n, Homarr, Dokploy, Portainer, etc.).
+
+### Process Management
+
+Top processes sorted by memory usage with stabilization to prevent flickering. Color-tinted resource values (green → orange → red). Kill processes by PID.
 
 ---
 
 ## Tech Stack
 
-### Agent (runs on your server)
-- **Language**: Go
-- **Purpose**: Collect stats, serve JSON API (this is the backend)
-- **Dependencies**: Minimal (stdlib + docker client)
-- **Build**: Static binary, cross-compiled for Linux (amd64, arm64)
-- **Distribution**: GitHub releases, install script
-- **Source**: Open source (MIT) at [deskmon-agent](https://github.com/neur0map/deskmon-agent)
+### macOS App
 
-### macOS App (runs on your Mac)
-- **Language**: Swift 6+
-- **UI**: SwiftUI (pure, no embedded backend)
-- **Purpose**: HTTP client + native UI rendering
-- **State**: @Observable with @MainActor isolation
-- **Networking**: URLSession with async/await, SSE streaming
-- **Target**: macOS 26 (Tahoe)
-- **Distribution**: Direct download, potentially Mac App Store
-- **Source**: Closed source (proprietary)
+| | |
+|---|---|
+| **Language** | Swift 6+ with strict concurrency |
+| **UI** | Pure SwiftUI |
+| **State** | @Observable with @MainActor isolation |
+| **Networking** | URLSession async/await, SSE streaming |
+| **Persistence** | UserDefaults |
+| **Target** | macOS 15+ (Sequoia) |
+
+### Agent
+
+| | |
+|---|---|
+| **Language** | Go |
+| **System stats** | gopsutil |
+| **Docker** | Docker SDK via socket |
+| **Services** | Auto-detection with plugin collectors |
+| **Server** | net/http with SSE streaming |
+| **Config** | YAML |
+| **Distribution** | Static binary (amd64, arm64) |
 
 ---
 
 ## Repository Structure
 
 ```
-deskmon/                          # This repo — macOS app
+deskmon/
 ├── deskmon/
-│   ├── deskmonApp.swift          # App entry: MenuBarExtra + Window
+│   ├── deskmonApp.swift              # App entry: MenuBarExtra + Window
 │   ├── Models/
-│   │   ├── ServerInfo.swift      # Server model (name, host, port, token)
-│   │   ├── ServerStats.swift     # CPU, memory, disk stats (Codable)
-│   │   ├── ServerStatus.swift    # Enum: healthy/warning/critical/offline
-│   │   └── DockerContainer.swift # Container model with full stats
+│   │   ├── ServerInfo.swift          # Server connection + stats + network history
+│   │   ├── ServerStats.swift         # CPU, memory, disk, network (Codable)
+│   │   ├── ServerStatus.swift        # healthy/warning/critical/offline
+│   │   ├── DockerContainer.swift     # Container model with full stats
+│   │   ├── ProcessInfo.swift         # Process model (PID, CPU, memory)
+│   │   ├── ServiceInfo.swift         # Auto-detected services + custom URLs
+│   │   └── BookmarkService.swift     # User-created service bookmarks
 │   ├── Services/
-│   │   ├── ServerManager.swift   # @Observable: SSE streaming, state, CRUD
-│   │   └── AgentClient.swift     # HTTP + SSE client for deskmon-agent API
+│   │   ├── ServerManager.swift       # @Observable: SSE streaming, state, CRUD
+│   │   └── AgentClient.swift         # HTTP + SSE client with auth
 │   ├── Views/
 │   │   ├── DashboardView.swift       # Menu bar popover (380x600)
 │   │   ├── MainDashboardView.swift   # Full window (sidebar + detail)
-│   │   ├── MenuBarLabel.swift        # Dynamic SF Symbol
-│   │   ├── Components/              # Reusable UI components
-│   │   └── Settings/                # Add/edit server sheets
-│   ├── Helpers/
-│   │   ├── Theme.swift           # OLED dark palette, card styles
-│   │   └── ByteFormatter.swift   # Human-readable bytes/speeds
-│   └── Assets.xcassets/
+│   │   ├── MenuBarLabel.swift        # Dynamic status icon
+│   │   ├── Components/               # SystemMetricsCard, NetworkStats, etc.
+│   │   ├── Services/                 # Pi-hole, Traefik, Nginx dashboards
+│   │   └── Settings/                 # Server add/edit sheets
+│   └── Helpers/
+│       ├── Theme.swift               # OLED dark palette, card styles
+│       └── ByteFormatter.swift       # Human-readable bytes/speeds
 ├── docs/
-│   ├── agent-api-contract.md     # What the app expects from the agent
-│   └── plans/                    # Design documents
+│   └── agent-api-contract.md         # SSE event schemas
 └── README.md
-
-deskmon-agent/                    # Separate repo — Go agent
-└── (https://github.com/neur0map/deskmon-agent)
 ```
+
+Agent source: [github.com/neur0map/deskmon-agent](https://github.com/neur0map/deskmon-agent)
 
 ---
 
-## Competition & Differentiation
+## Agent API
 
-| Feature | Deskmon | iStatMenus | Beszel | Zabbix Monitor |
-|---------|-------|------------|--------|----------------|
-| Remote servers | ✅ | ❌ | ✅ | ✅ |
-| macOS native | ✅ | ✅ | ❌ | ✅ |
-| No backend required | ✅ | ✅ | ✅ | ❌ |
-| Docker stats | ✅ | ❌ | ✅ | ✅ |
-| App integrations | ✅ | ❌ | ❌ | via Zabbix |
-| Open source agent | ✅ | N/A | ✅ | N/A |
-| Menu bar | ✅ | ✅ | ❌ | ✅ |
+The app connects via SSE at `GET /stats/stream` with Bearer token auth. Events arrive at different intervals:
+
+| Event | Interval | Data |
+|-------|----------|------|
+| `system` | 1s | CPU, memory, disk, network, uptime, temps |
+| `docker` | 5s | All containers with per-container stats |
+| `services` | 10s | Detected services with integration stats |
+| `processes` | 1s | Top processes by CPU |
+
+See [`docs/agent-api-contract.md`](docs/agent-api-contract.md) for full schemas.
+
+---
+
+## Roadmap
+
+### Done
+
+- [x] Live SSE streaming with auto-reconnect and fallback polling
+- [x] System stats (CPU, memory, disk, network sparkline)
+- [x] Docker container stats with start/stop/restart actions
+- [x] Container detail panel (CPU, memory, network I/O, disk I/O, ports, health)
+- [x] Process list with kill support
+- [x] Pi-hole dashboard (v5 + v6) with enable/disable blocking
+- [x] Traefik dashboard (routers, services, middleware)
+- [x] Nginx dashboard (connections, requests)
+- [x] Service auto-detection and custom URL overrides
+- [x] Service bookmarks for undetected services
+- [x] Multi-server support with server switching
+- [x] Menu bar icon with dynamic status color
+- [x] Full window dashboard with sidebar
+- [x] OLED dark theme
+
+### Next
+
+- [ ] Desktop widgets (WidgetKit)
+- [ ] Alert thresholds and notifications
+- [ ] More service integrations (Plex, Jellyfin, Home Assistant, AdGuard)
+- [ ] Historical sparklines (last hour)
+- [ ] Keyboard shortcuts
+- [ ] Signed DMG distribution
+- [ ] Landing page at deskmon.dev
+
+### Future
+
+- [ ] iOS companion app
+- [ ] Proxmox / TrueNAS integration
+- [ ] SMART disk health monitoring
+- [ ] GPU stats (Nvidia)
+
+---
+
+## Comparison
+
+| Feature | Deskmon | iStatMenus | Beszel | Grafana+Prometheus |
+|---------|---------|------------|--------|--------------------|
+| Remote server monitoring | Yes | No | Yes | Yes |
+| Native macOS menu bar | Yes | Yes | No | No |
+| No separate backend needed | Yes | Yes | Yes | No |
+| Docker container stats | Yes | No | Yes | Yes |
+| Service integrations | Yes | No | No | Via plugins |
+| Container actions | Yes | No | No | No |
+| Open source | Yes | No | Yes | Yes |
+| Zero config | Yes | Yes | Partial | No |
+
+---
+
+## Contributing
+
+Contributions are welcome. Please open an issue first to discuss what you'd like to change.
+
+### Development Setup
+
+1. Clone the repo
+2. Open `deskmon.xcodeproj` in Xcode 16+
+3. Change signing team to your Apple ID
+4. Build and run (Cmd+R)
+
+The app expects a running [deskmon-agent](https://github.com/neur0map/deskmon-agent) instance to connect to.
 
 ---
 
 ## License
 
-- **Agent**: MIT (open source)
-- **macOS App**: Proprietary (closed source)
+MIT — see [LICENSE](LICENSE).
+
+Both the macOS app and the [agent](https://github.com/neur0map/deskmon-agent) are open source.
 
 ---
 
