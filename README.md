@@ -22,7 +22,7 @@ Install a lightweight agent on your server, point the macOS app at it, and you g
 - **Docker containers** — status, CPU, memory, network I/O, disk I/O per container
 - **Container actions** — start, stop, restart containers from your Mac
 - **Process management** — top processes by memory usage, kill by PID
-- **Service dashboards** — Pi-hole, Traefik, Nginx with full stats and controls
+- **Service dashboards** — Pi-hole with full stats and controls; Traefik and Nginx (experimental, untested)
 - **Service bookmarks** — quick-launch for any self-hosted service (n8n, Homarr, Dokploy, etc.)
 - **Multi-server** — monitor multiple machines from one app
 - **Live streaming** — SSE connection with 1s system / 5s Docker / 10s services refresh
@@ -82,7 +82,7 @@ The agent runs as a systemd service on port 7654. See the [agent repo](https://g
 
 **Option A: Buy the signed build — $19** (recommended)
 
-Download a ready-to-run, Apple-signed and notarized DMG from [deskmon.dev](https://deskmon.dev).
+Download a ready-to-run, Apple-signed and notarized DMG from [deskmon.prowl.sh](https://deskmon.prowl.sh).
 
 No Xcode. No code signing. No Gatekeeper warnings. Just download, drag to Applications, done.
 
@@ -122,11 +122,11 @@ Card-style container list with color-coded status strips. Per-container CPU, mem
 
 Auto-detected service integrations with dedicated dashboards:
 
-| Service | Stats | Controls |
-|---------|-------|----------|
-| **Pi-hole** | Queries, blocked %, forwarded, cached, unique domains, clients | Enable/disable blocking |
-| **Traefik** | HTTP/TCP/UDP routers, services, middleware, warnings | — |
-| **Nginx** | Active connections, requests/sec, reading/writing/waiting | — |
+| Service | Stats | Controls | Status |
+|---------|-------|----------|--------|
+| **Pi-hole** | Queries, blocked %, forwarded, cached, unique domains, clients | Enable/disable blocking | Stable |
+| **Traefik** | HTTP/TCP/UDP routers, services, middleware, warnings | — | Experimental |
+| **Nginx** | Active connections, requests/sec, reading/writing/waiting | — | Experimental |
 
 Custom URL overrides let you open any service in your browser. Bookmark cards let you add quick links to services the agent doesn't detect (n8n, Homarr, Dokploy, Portainer, etc.).
 
@@ -243,6 +243,8 @@ See [`docs/agent-api-contract.md`](docs/agent-api-contract.md) for full schemas.
 
 ### Future
 
+- [ ] Notifications and alerts (CPU/memory/disk thresholds, container down, service offline)
+- [ ] UI/UX improvements
 - [ ] iOS companion app
 - [ ] Proxmox / TrueNAS integration
 - [ ] SMART disk health monitoring

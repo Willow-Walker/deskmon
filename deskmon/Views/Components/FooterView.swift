@@ -3,8 +3,6 @@ import SwiftUI
 struct FooterView: View {
     @Environment(ServerManager.self) private var serverManager
     @Environment(\.openWindow) private var openWindow
-    var onAddServer: () -> Void
-    var onSettings: () -> Void
 
     var body: some View {
         HStack(spacing: 6) {
@@ -16,16 +14,6 @@ struct FooterView: View {
             .buttonStyle(.darkProminent)
 
             Spacer()
-
-            Button(action: onAddServer) {
-                Image(systemName: "plus")
-            }
-            .buttonStyle(.dark)
-
-            Button(action: onSettings) {
-                Image(systemName: "gear")
-            }
-            .buttonStyle(.dark)
 
             Button {
                 serverManager.stopStreaming()
