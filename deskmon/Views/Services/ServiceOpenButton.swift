@@ -11,21 +11,21 @@ struct ServiceOpenButton: View {
     private var hasURL: Bool { service.effectiveURL != nil }
 
     var body: some View {
-        HStack(spacing: 4) {
-            // Open button
+        HStack(spacing: 6) {
+            // Open in browser — labeled button
             if let url = service.effectiveURL {
                 Button {
                     NSWorkspace.shared.open(url)
                 } label: {
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.body)
+                    Label("Open", systemImage: "arrow.up.right.square")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
                 .help("Open in browser")
             }
 
-            // Edit URL button
+            // Edit URL — small gear
             Button {
                 customURLText = ServiceURLStore.customURL(for: service.pluginId)
                     ?? service.url
@@ -33,8 +33,8 @@ struct ServiceOpenButton: View {
                 showingURLEditor = true
             } label: {
                 Image(systemName: hasURL ? "link" : "link.badge.plus")
-                    .font(.caption)
-                    .foregroundStyle(hasURL ? .tertiary : .secondary)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
             .buttonStyle(.plain)
             .help(hasURL ? "Edit URL" : "Set custom URL")
