@@ -16,10 +16,35 @@ struct ServiceInfo: Codable, Sendable, Identifiable {
     let summary: [StatItem]
     let stats: [String: AnyCodableValue]
     let error: String?
+    let url: String?
 
     var id: String { pluginId }
 
     var isRunning: Bool { status == "running" }
+
+    /// Returns the user's custom URL override if set, otherwise the auto-detected URL.
+    var effectiveURL: URL? {
+        let raw = ServiceURLStore.customURL(for: pluginId) ?? url
+        guard let raw, !raw.isEmpty else { return nil }
+        return URL(string: raw)
+    }
+}
+
+// MARK: - Custom URL Persistence
+
+enum ServiceURLStore {
+    private static let key = "ServiceCustomURLs"
+
+    static func customURL(for pluginId: String) -> String? {
+        let dict = UserDefaults.standard.dictionary(forKey: key) as? [String: String]
+        return dict?[pluginId]
+    }
+
+    static func setCustomURL(_ url: String?, for pluginId: String) {
+        var dict = (UserDefaults.standard.dictionary(forKey: key) as? [String: String]) ?? [:]
+        dict[pluginId] = url
+        UserDefaults.standard.set(dict, forKey: key)
+    }
 }
 
 // MARK: - AnyCodableValue (type-erased JSON value)

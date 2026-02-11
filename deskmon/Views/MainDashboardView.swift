@@ -253,35 +253,7 @@ struct MainDashboardView: View {
                 VStack(spacing: 16) {
                     statusBar(server: server, stats: stats)
 
-                    HStack(spacing: 12) {
-                        GaugeCardView(
-                            title: "CPU",
-                            value: String(format: "%.1f%%", stats.cpu.usagePercent),
-                            percent: stats.cpu.usagePercent,
-                            icon: "cpu",
-                            subtitle: "\(stats.cpu.coreCount) cores",
-                            tint: Theme.cpu,
-                            tintLight: Theme.cpuLight
-                        )
-                        GaugeCardView(
-                            title: "Memory",
-                            value: String(format: "%.1f%%", stats.memory.usagePercent),
-                            percent: stats.memory.usagePercent,
-                            icon: "memorychip",
-                            subtitle: "\(ByteFormatter.format(stats.memory.usedBytes)) / \(ByteFormatter.format(stats.memory.totalBytes))",
-                            tint: Theme.memory,
-                            tintLight: Theme.memoryLight
-                        )
-                        GaugeCardView(
-                            title: "Disk",
-                            value: String(format: "%.1f%%", stats.disk.usagePercent),
-                            percent: stats.disk.usagePercent,
-                            icon: "internaldrive",
-                            subtitle: "\(ByteFormatter.format(stats.disk.usedBytes)) / \(ByteFormatter.format(stats.disk.totalBytes))",
-                            tint: Theme.disk,
-                            tintLight: Theme.diskLight
-                        )
-                    }
+                    SystemMetricsCard(stats: stats)
 
                     networkCard(stats: stats, history: server.networkHistory)
 

@@ -6,7 +6,6 @@ struct ServicesGridView: View {
     let onSelect: (ServiceInfo) -> Void
 
     @State private var hoveredID: String?
-    @State private var refreshProgress: CGFloat = 0
 
     /// The agent sends services events every 10 seconds.
     private static let refreshInterval: TimeInterval = 10
@@ -21,8 +20,8 @@ struct ServicesGridView: View {
             if services.isEmpty {
                 emptyState
             } else {
-                // Refresh countdown bar
-                refreshBar
+                // Refresh countdown bar — driven by wall clock, not animation
+                RefreshCountdownBar(lastUpdate: lastUpdate, interval: Self.refreshInterval)
 
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(services) { service in
@@ -40,59 +39,6 @@ struct ServicesGridView: View {
                     }
                 }
             }
-        }
-        .onChange(of: lastUpdate) {
-            // Reset and restart the countdown when new data arrives.
-            refreshProgress = 0
-            withAnimation(.linear(duration: Self.refreshInterval)) {
-                refreshProgress = 1
-            }
-        }
-        .onAppear {
-            // Kick off the first countdown based on elapsed time since last update.
-            if let last = lastUpdate {
-                let elapsed = Date().timeIntervalSince(last)
-                let remaining = max(Self.refreshInterval - elapsed, 0)
-                refreshProgress = CGFloat(elapsed / Self.refreshInterval)
-                withAnimation(.linear(duration: remaining)) {
-                    refreshProgress = 1
-                }
-            }
-        }
-    }
-
-    // MARK: - Refresh Bar
-
-    private var refreshBar: some View {
-        VStack(spacing: 4) {
-            HStack {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.trianglehead.clockwise")
-                        .font(.system(size: 8))
-                    Text("Next refresh")
-                        .font(.caption2)
-                }
-                .foregroundStyle(.secondary)
-
-                Spacer()
-
-                Text("\(Int((1 - refreshProgress) * Self.refreshInterval))s")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-                    .contentTransition(.numericText())
-            }
-
-            GeometryReader { geo in
-                Capsule()
-                    .fill(Color.white.opacity(0.06))
-                    .overlay(alignment: .leading) {
-                        Capsule()
-                            .fill(Theme.accent.opacity(0.4))
-                            .frame(width: geo.size.width * refreshProgress)
-                    }
-            }
-            .frame(height: 3)
-            .clipShape(Capsule())
         }
     }
 
@@ -112,5 +58,63 @@ struct ServicesGridView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
+    }
+}
+
+// MARK: - Refresh Countdown Bar
+
+/// Ticks once per second using TimelineView so both the countdown text
+/// and progress bar update in sync from the wall clock.
+private struct RefreshCountdownBar: View {
+    let lastUpdate: Date?
+    let interval: TimeInterval
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+            let now = timeline.date
+            let elapsed = lastUpdate.map { now.timeIntervalSince($0) } ?? interval
+            let overdue = elapsed >= interval
+            let progress = min(max(elapsed / interval, 0), 1)
+            let remaining = max(Int(ceil(interval - elapsed)), 0)
+
+            VStack(spacing: 4) {
+                HStack {
+                    HStack(spacing: 4) {
+                        if overdue {
+                            ProgressView()
+                                .controlSize(.mini)
+                        } else {
+                            Image(systemName: "arrow.trianglehead.clockwise")
+                                .font(.system(size: 8))
+                        }
+                        Text(overdue ? "Refreshing..." : "Next refresh")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    if !overdue {
+                        Text("\(remaining)s")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                            .contentTransition(.numericText())
+                    }
+                }
+
+                GeometryReader { geo in
+                    Capsule()
+                        .fill(Color.white.opacity(0.06))
+                        .overlay(alignment: .leading) {
+                            Capsule()
+                                .fill(Theme.accent.opacity(0.4))
+                                .frame(width: geo.size.width * progress)
+                                .animation(.linear(duration: 1), value: progress)
+                        }
+                }
+                .frame(height: 3)
+                .clipShape(Capsule())
+            }
+        }
     }
 }

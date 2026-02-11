@@ -55,6 +55,8 @@ struct TraefikDashboardView: View {
 
             Spacer()
 
+            ServiceOpenButton(service: service)
+
             if warnings > 0 {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")

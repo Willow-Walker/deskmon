@@ -49,6 +49,8 @@ struct NginxDashboardView: View {
             }
 
             Spacer()
+
+            ServiceOpenButton(service: service)
         }
         .padding(14)
         .tintedCardStyle(cornerRadius: 12, tint: accent)
