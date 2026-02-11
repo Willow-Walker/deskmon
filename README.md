@@ -59,7 +59,7 @@ No cloud. No accounts. No telemetry. The app talks directly to your agent over y
 
 ---
 
-## Getting Started
+## Installation
 
 ### 1. Install the agent on your server
 
@@ -80,10 +80,13 @@ The agent runs as a systemd service on port 7654. See the [agent repo](https://g
 
 ### 2. Install the macOS app
 
-**Option A: Download** (recommended)
-- Signed, notarized DMG from [deskmon.dev](https://deskmon.dev) — coming soon
+**Option A: Buy the signed build — $19** (recommended)
 
-**Option B: Build from source**
+Download a ready-to-run, Apple-signed and notarized DMG from [deskmon.dev](https://deskmon.dev).
+
+No Xcode. No code signing. No Gatekeeper warnings. Just download, drag to Applications, done.
+
+**Option B: Build from source — free**
 
 ```bash
 git clone https://github.com/neur0map/deskmon.git
@@ -91,11 +94,17 @@ cd deskmon
 open deskmon.xcodeproj
 ```
 
-Change the signing team to your Apple ID, then build and run (Cmd+R).
+Change the signing team to your Apple ID, then build and run (Cmd+R). You get the exact same app — every feature, no limits. Self-built versions are unsigned, which means Gatekeeper warnings and no automatic updates.
 
 ### 3. Add your server
 
 Click the menu bar icon, go to Settings, and add your server's IP address and auth token.
+
+### Why pay?
+
+Everything is open source. The code is right here. You can fork it, build it, modify it — no restrictions.
+
+The $19 buys you convenience: a signed, notarized macOS app that just works. No Xcode install (12 GB), no developer account setup, no fighting Gatekeeper, no manual updates. You're paying for the time saved, not the code.
 
 ---
 
@@ -226,13 +235,11 @@ See [`docs/agent-api-contract.md`](docs/agent-api-contract.md) for full schemas.
 
 ### Next
 
+- [ ] More service integrations (Plex, Jellyfin, Home Assistant, AdGuard)
 - [ ] Desktop widgets (WidgetKit)
 - [ ] Alert thresholds and notifications
-- [ ] More service integrations (Plex, Jellyfin, Home Assistant, AdGuard)
 - [ ] Historical sparklines (last hour)
 - [ ] Keyboard shortcuts
-- [ ] Signed DMG distribution
-- [ ] Landing page at deskmon.dev
 
 ### Future
 
@@ -240,6 +247,7 @@ See [`docs/agent-api-contract.md`](docs/agent-api-contract.md) for full schemas.
 - [ ] Proxmox / TrueNAS integration
 - [ ] SMART disk health monitoring
 - [ ] GPU stats (Nvidia)
+- [ ] Tailscale auto-detection for remote access
 
 ---
 
