@@ -9,6 +9,8 @@ struct PiHoleDashboardView: View {
     @State private var authError: String?
     @State private var isTogglingBlocking = false
     @State private var blockingError: String?
+    /// Optimistic override — set instantly on toggle, cleared when SSE catches up.
+    @State private var blockingOverride: Bool?
 
     private var accent: Color { serviceAccent(for: "pihole") }
 
@@ -20,8 +22,8 @@ struct PiHoleDashboardView: View {
     private var queriesForwarded: Int64 { service.stats["queriesForwarded"]?.intValue ?? 0 }
     private var queriesCached: Int64 { service.stats["queriesCached"]?.intValue ?? 0 }
     private var uniqueDomains: Int64 { service.stats["uniqueDomains"]?.intValue ?? 0 }
-    private var blocking: String { service.stats["blocking"]?.stringValue ?? "enabled" }
-    private var isBlocking: Bool { blocking != "disabled" }
+    private var serverBlocking: String { service.stats["blocking"]?.stringValue ?? "enabled" }
+    private var isBlocking: Bool { blockingOverride ?? (serverBlocking != "disabled") }
     private var piStatus: String { service.stats["status"]?.stringValue ?? service.status }
     private var version: String { service.stats["version"]?.stringValue ?? "" }
     private var authRequired: Bool { service.stats["authRequired"]?.boolValue == true }
@@ -40,6 +42,10 @@ struct PiHoleDashboardView: View {
                 }
             }
             .padding(20)
+        }
+        .onChange(of: serverBlocking) {
+            // SSE caught up — clear optimistic override
+            blockingOverride = nil
         }
     }
 
@@ -243,17 +249,19 @@ struct PiHoleDashboardView: View {
     private func toggleBlocking() {
         isTogglingBlocking = true
         blockingError = nil
+        let newState = !isBlocking
 
         Task {
             do {
                 _ = try await serverManager.performServiceAction(
                     pluginId: "pihole",
                     action: "setBlocking",
-                    params: ["enabled": !isBlocking]
+                    params: ["enabled": newState]
                 )
-                // Wait for agent to collect updated stats, then refresh
-                try? await Task.sleep(for: .seconds(2))
-                await serverManager.refreshStats()
+                // Optimistic update — flip UI immediately
+                withAnimation(.smooth(duration: 0.3)) {
+                    blockingOverride = newState
+                }
             } catch {
                 blockingError = error.localizedDescription
             }
