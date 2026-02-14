@@ -101,6 +101,23 @@ struct DashboardView: View {
                     .animation(.smooth, value: serverManager.selectedServerID)
                 } else if server.connectionPhase == .syncing {
                     GoingLiveView()
+                } else if server.connectionPhase == .disconnected && server.hasConnectedOnce {
+                    Spacer()
+                    VStack(spacing: 12) {
+                        Image(systemName: "bolt.horizontal.circle")
+                            .font(.system(size: 36))
+                            .foregroundStyle(Theme.critical)
+                            .symbolEffect(.pulse, options: .repeating)
+                        Text("Connection Lost")
+                            .font(.headline)
+                        Text("Reconnecting to \(server.name)...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(.top, 4)
+                    }
+                    Spacer()
                 } else {
                     Spacer()
                     ProgressView()

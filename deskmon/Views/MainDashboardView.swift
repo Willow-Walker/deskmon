@@ -341,6 +341,21 @@ struct MainDashboardView: View {
             }
         } else if server.connectionPhase == .syncing {
             GoingLiveView()
+        } else if server.connectionPhase == .disconnected && server.hasConnectedOnce {
+            VStack(spacing: 14) {
+                Image(systemName: "bolt.horizontal.circle")
+                    .font(.system(size: 44))
+                    .foregroundStyle(Theme.critical)
+                    .symbolEffect(.pulse, options: .repeating)
+                Text("Connection Lost")
+                    .font(.title3.weight(.semibold))
+                Text("Reconnecting to \(server.name)...")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(.top, 2)
+            }
         } else {
             VStack(spacing: 12) {
                 ProgressView()
