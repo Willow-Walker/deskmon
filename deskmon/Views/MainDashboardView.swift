@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainDashboardView: View {
     @Environment(ServerManager.self) private var serverManager
+    @Environment(AppLockManager.self) private var lockManager
     @State private var showingAddServer = false
     @State private var editingServer: ServerInfo?
     @State private var selectedContainer: DockerContainer?
@@ -10,6 +11,7 @@ struct MainDashboardView: View {
     @State private var restartFeedback: String?
 
     var body: some View {
+        ZStack {
         HStack(spacing: 0) {
             // Sidebar
             VStack(spacing: 0) {
@@ -100,6 +102,11 @@ struct MainDashboardView: View {
             }
         }
         .background(Theme.background)
+
+            if lockManager.isLocked(.window) {
+                AppLockView(surface: .window)
+            }
+        }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showingAddServer) {
             AddServerSheet()
@@ -112,6 +119,11 @@ struct MainDashboardView: View {
         }
         .onDisappear {
             NSApp.setActivationPolicy(.accessory)
+            lockManager.lock(.window)
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)) { _ in
+            lockManager.lockAllSurfaces()
+            serverManager.startStreaming()
         }
     }
 
@@ -355,7 +367,7 @@ struct MainDashboardView: View {
 
             Divider().frame(height: 16).overlay(Theme.cardBorder)
 
-            Label("\(server.host):\(server.port)", systemImage: "network")
+            Label("\(server.username)@\(server.host)", systemImage: "network")
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(.secondary)
 

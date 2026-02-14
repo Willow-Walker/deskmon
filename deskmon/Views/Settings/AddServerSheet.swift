@@ -6,16 +6,17 @@ struct AddServerSheet: View {
 
     @State private var name = ""
     @State private var host = ""
-    @State private var port = "7654"
-    @State private var token = ""
+    @State private var username = ""
+    @State private var password = ""
 
-    @State private var isTesting = false
+    @State private var isConnecting = false
     @State private var errorMessage: String?
 
     private var isValid: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty &&
         !host.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !token.trimmingCharacters(in: .whitespaces).isEmpty
+        !username.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !password.isEmpty
     }
 
     var body: some View {
@@ -28,12 +29,8 @@ struct AddServerSheet: View {
             VStack(alignment: .leading, spacing: 14) {
                 field("Name", text: $name, prompt: "Homelab")
                 field("Host / IP", text: $host, prompt: "192.168.1.100")
-
-                HStack(spacing: 12) {
-                    field("Port", text: $port, prompt: "7654")
-                        .frame(width: 100)
-                    secureField("Token", text: $token, prompt: "Agent token")
-                }
+                field("SSH Username", text: $username, prompt: "pi")
+                secureField("SSH Password", text: $password, prompt: "Password")
             }
 
             if let errorMessage {
@@ -55,9 +52,9 @@ struct AddServerSheet: View {
                 Spacer()
 
                 Button {
-                    Task { await testAndAdd() }
+                    Task { await connectAndAdd() }
                 } label: {
-                    if isTesting {
+                    if isConnecting {
                         ProgressView()
                             .controlSize(.small)
                             .padding(.horizontal, 8)
@@ -66,47 +63,59 @@ struct AddServerSheet: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!isValid || isTesting)
+                .disabled(!isValid || isConnecting)
             }
         }
         .padding(.horizontal, 24)
         .padding(.top, 24)
         .padding(.bottom, 20)
-        .frame(width: 380, height: 320)
+        .frame(width: 380)
+        .frame(minHeight: 340)
         .background(Theme.background)
         .preferredColorScheme(.dark)
     }
 
-    private func testAndAdd() async {
+    private func connectAndAdd() async {
         errorMessage = nil
-        isTesting = true
-        defer { isTesting = false }
+        isConnecting = true
+        defer { isConnecting = false }
 
         let trimmedHost = host.trimmingCharacters(in: .whitespaces)
-        let portNum = Int(port) ?? 7654
+        let trimmedUsername = username.trimmingCharacters(in: .whitespaces)
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
 
-        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let result = await serverManager.testConnection(
-            host: trimmedHost, port: portNum, token: trimmedToken
+        // Create server first, then attempt SSH connection
+        let server = serverManager.addServer(
+            name: trimmedName,
+            host: trimmedHost,
+            username: trimmedUsername
         )
 
-        switch result {
-        case .success:
-            serverManager.addServer(
-                name: name.trimmingCharacters(in: .whitespaces),
-                host: trimmedHost,
-                port: portNum,
-                token: trimmedToken
-            )
+        do {
+            try await serverManager.connectServer(server, password: password)
             dismiss()
-        case .unreachable:
-            errorMessage = "Server unreachable at \(trimmedHost):\(portNum)"
-        case .unauthorized:
-            errorMessage = "Invalid token — check your agent config"
-        case .error(let msg):
-            errorMessage = msg
+        } catch {
+            // Remove the server if connection failed
+            serverManager.deleteServer(server)
+            errorMessage = Self.friendlyError(error)
         }
+    }
+
+    private static func friendlyError(_ error: Error) -> String {
+        let msg = error.localizedDescription
+        if msg.contains("IOError") && msg.contains("error 61") {
+            return "Connection refused — check host and SSH port"
+        }
+        if msg.contains("IOError") && msg.contains("error 1") {
+            return "Connection not permitted — check network permissions"
+        }
+        if msg.lowercased().contains("authentication") || msg.lowercased().contains("password") {
+            return "Authentication failed — check username and password"
+        }
+        if msg.contains("IOError") && msg.contains("error 60") {
+            return "Connection timed out — host may be unreachable"
+        }
+        return msg
     }
 
     private func field(_ label: String, text: Binding<String>, prompt: String) -> some View {

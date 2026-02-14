@@ -8,9 +8,11 @@ struct NetworkSample: Sendable {
 }
 
 enum ConnectionPhase: Sendable {
-    case connecting   // No data yet
-    case syncing      // Got snapshot, establishing live stream
-    case live         // SSE delivering events (or timed into live)
+    case disconnected     // No SSH session
+    case sshConnecting    // SSH handshake in progress
+    case tunnelOpen       // SSH up, tunnel open, fetching snapshot
+    case syncing          // Got first snapshot, going-live animation
+    case live             // SSE streaming through tunnel
 }
 
 @MainActor
@@ -19,14 +21,16 @@ final class ServerInfo: Identifiable {
     let id: UUID
     var name: String
     var host: String
-    var port: Int
-    var token: String
+    var username: String
+    var sshPort: Int
+    var agentPort: Int
+    var hasKeyInstalled: Bool
     var status: ServerStatus = .offline
     var stats: ServerStats? = nil
     var containers: [DockerContainer] = []
     var processes: [ProcessInfo] = []
     var networkHistory: [NetworkSample] = []
-    var connectionPhase: ConnectionPhase = .connecting
+    var connectionPhase: ConnectionPhase = .disconnected
     var hasConnectedOnce = false
 
     /// Keep enough samples to cover the visible window plus a small buffer
@@ -35,12 +39,22 @@ final class ServerInfo: Identifiable {
     /// Duration of the visible time window in seconds.
     static let windowDuration: TimeInterval = 60
 
-    init(id: UUID = UUID(), name: String, host: String, port: Int = 7654, token: String = "") {
+    init(
+        id: UUID = UUID(),
+        name: String,
+        host: String,
+        username: String,
+        sshPort: Int = 22,
+        agentPort: Int = 7654,
+        hasKeyInstalled: Bool = false
+    ) {
         self.id = id
         self.name = name
         self.host = host
-        self.port = port
-        self.token = token
+        self.username = username
+        self.sshPort = sshPort
+        self.agentPort = agentPort
+        self.hasKeyInstalled = hasKeyInstalled
     }
 
     func appendNetworkSample(_ network: NetworkStats) {

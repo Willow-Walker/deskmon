@@ -8,8 +8,8 @@ struct EditServerSheet: View {
 
     @State private var name: String
     @State private var host: String
-    @State private var port: String
-    @State private var token: String
+    @State private var username: String
+    @State private var password = ""
 
     @State private var isTesting = false
     @State private var errorMessage: String?
@@ -18,28 +18,20 @@ struct EditServerSheet: View {
         self.server = server
         _name = State(initialValue: server.name)
         _host = State(initialValue: server.host)
-        _port = State(initialValue: String(server.port))
-        _token = State(initialValue: server.token)
+        _username = State(initialValue: server.username)
     }
 
     private var isValid: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty &&
         !host.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !token.trimmingCharacters(in: .whitespaces).isEmpty
+        !username.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private var hasChanges: Bool {
         name != server.name ||
         host != server.host ||
-        port != String(server.port) ||
-        token != server.token
-    }
-
-    /// Only re-verify if connection details changed (host, port, or token).
-    private var needsReVerify: Bool {
-        host != server.host ||
-        port != String(server.port) ||
-        token != server.token
+        username != server.username ||
+        !password.isEmpty
     }
 
     var body: some View {
@@ -52,12 +44,8 @@ struct EditServerSheet: View {
             VStack(alignment: .leading, spacing: 14) {
                 field("Name", text: $name, prompt: "Homelab")
                 field("Host / IP", text: $host, prompt: "192.168.1.100")
-
-                HStack(spacing: 12) {
-                    field("Port", text: $port, prompt: "7654")
-                        .frame(width: 100)
-                    secureField("Token", text: $token, prompt: "Agent token")
-                }
+                field("SSH Username", text: $username, prompt: "pi")
+                secureField("New Password", text: $password, prompt: "Leave blank to keep current")
             }
 
             if let errorMessage {
@@ -79,7 +67,7 @@ struct EditServerSheet: View {
                 Spacer()
 
                 Button {
-                    Task { await testAndSave() }
+                    Task { await save() }
                 } label: {
                     if isTesting {
                         ProgressView()
@@ -96,49 +84,29 @@ struct EditServerSheet: View {
         .padding(.horizontal, 24)
         .padding(.top, 24)
         .padding(.bottom, 20)
-        .frame(width: 380, height: 320)
+        .frame(width: 380, height: 340)
         .background(Theme.background)
         .preferredColorScheme(.dark)
     }
 
-    private func testAndSave() async {
+    private func save() async {
         errorMessage = nil
+        isTesting = true
+        defer { isTesting = false }
 
         let trimmedHost = host.trimmingCharacters(in: .whitespaces)
-        let portNum = Int(port) ?? 7654
+        let trimmedUsername = username.trimmingCharacters(in: .whitespaces)
 
-        // Only re-verify connection if host/port/token changed
-        if needsReVerify {
-            isTesting = true
-            defer { isTesting = false }
-
-            let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            let result = await serverManager.testConnection(
-                host: trimmedHost, port: portNum, token: trimmedToken
-            )
-
-            switch result {
-            case .success:
-                break
-            case .unreachable:
-                errorMessage = "Server unreachable at \(trimmedHost):\(portNum)"
-                return
-            case .unauthorized:
-                errorMessage = "Invalid token — check your agent config"
-                return
-            case .error(let msg):
-                errorMessage = msg
-                return
-            }
+        // Update password in Keychain if changed
+        if !password.isEmpty {
+            try? KeychainStore.savePassword(password, for: server.id)
         }
 
         serverManager.updateServer(
             id: server.id,
             name: name.trimmingCharacters(in: .whitespaces),
             host: trimmedHost,
-            port: portNum,
-            token: token.trimmingCharacters(in: .whitespacesAndNewlines)
+            username: trimmedUsername
         )
         dismiss()
     }

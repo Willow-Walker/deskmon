@@ -2,35 +2,45 @@ import SwiftUI
 
 struct DashboardView: View {
     @Environment(ServerManager.self) private var serverManager
+    @Environment(AppLockManager.self) private var lockManager
     @State private var selectedContainer: DockerContainer?
     @State private var selectedProcess: ProcessInfo?
 
     var body: some View {
-        VStack(spacing: 0) {
-            if let container = liveSelectedContainer {
-                containerDetailPanel(container: container)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal: .move(edge: .trailing)
-                    ))
-            } else if let process = liveSelectedProcess {
-                processDetailPanel(process: process)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal: .move(edge: .trailing)
-                    ))
-            } else {
-                dashboardContent(manager: serverManager)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .leading),
-                        removal: .move(edge: .leading)
-                    ))
+        ZStack {
+            VStack(spacing: 0) {
+                if let container = liveSelectedContainer {
+                    containerDetailPanel(container: container)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing),
+                            removal: .move(edge: .trailing)
+                        ))
+                } else if let process = liveSelectedProcess {
+                    processDetailPanel(process: process)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing),
+                            removal: .move(edge: .trailing)
+                        ))
+                } else {
+                    dashboardContent(manager: serverManager)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .leading),
+                            removal: .move(edge: .leading)
+                        ))
+                }
+            }
+
+            if lockManager.isLocked(.menuBar) {
+                AppLockView(surface: .menuBar)
             }
         }
         .clipped()
         .frame(width: 380, height: 580)
         .background(Theme.background)
         .preferredColorScheme(.dark)
+        .onDisappear {
+            lockManager.lock(.menuBar)
+        }
     }
 
     // MARK: - Dashboard Content

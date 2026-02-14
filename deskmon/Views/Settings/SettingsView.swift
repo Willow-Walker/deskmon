@@ -38,7 +38,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(server.name)
                                 .font(.body.weight(.medium))
-                            Text("\(server.host):\(server.port)")
+                            Text("\(server.username)@\(server.host)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
