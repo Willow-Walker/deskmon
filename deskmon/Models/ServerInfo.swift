@@ -25,13 +25,9 @@ final class ServerInfo: Identifiable {
     var stats: ServerStats? = nil
     var containers: [DockerContainer] = []
     var processes: [ProcessInfo] = []
-    var services: [ServiceInfo] = []
     var networkHistory: [NetworkSample] = []
     var connectionPhase: ConnectionPhase = .connecting
     var hasConnectedOnce = false
-
-    /// Timestamp of the last services SSE event; drives the refresh countdown.
-    var lastServicesUpdate: Date?
 
     /// Keep enough samples to cover the visible window plus a small buffer
     /// for the Catmull-Rom spline context at edges.

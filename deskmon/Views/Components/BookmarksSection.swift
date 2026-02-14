@@ -1,18 +1,10 @@
 import SwiftUI
 
-struct ServicesGridView: View {
-    let services: [ServiceInfo]
-    let lastUpdate: Date?
-    let onSelect: (ServiceInfo) -> Void
-
-    @State private var hoveredID: String?
+struct BookmarksSection: View {
     @State private var hoveredBookmarkID: UUID?
     @State private var bookmarks: [BookmarkService] = []
     @State private var showingAddBookmark = false
     @State private var editingBookmark: BookmarkService?
-
-    /// The agent sends services events every 10 seconds.
-    private static let refreshInterval: TimeInterval = 10
 
     private let columns = [
         GridItem(.flexible(), spacing: 12),
@@ -21,14 +13,14 @@ struct ServicesGridView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header with add button
+            // Header
             HStack {
-                Text("Services")
+                Text("Bookmarks")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
 
-                if !services.isEmpty {
-                    Text("(\(services.count + bookmarks.count))")
+                if !bookmarks.isEmpty {
+                    Text("(\(bookmarks.count))")
                         .font(.subheadline)
                         .foregroundStyle(.tertiary)
                 }
@@ -41,29 +33,13 @@ struct ServicesGridView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("Add service bookmark")
+                .help("Add bookmark")
             }
 
-            if !services.isEmpty {
-                RefreshCountdownBar(lastUpdate: lastUpdate, interval: Self.refreshInterval)
-            }
-
-            if services.isEmpty && bookmarks.isEmpty {
+            if bookmarks.isEmpty {
                 emptyState
             } else {
                 LazyVGrid(columns: columns, spacing: 12) {
-                    // Detected services
-                    ForEach(services) { service in
-                        ServiceCardView(
-                            service: service,
-                            isHovered: hoveredID == service.id
-                        )
-                        .contentShape(.rect)
-                        .onTapGesture { onSelect(service) }
-                        .onHover { hoveredID = $0 ? service.id : nil }
-                    }
-
-                    // Bookmark services
                     ForEach(bookmarks) { bookmark in
                         BookmarkCardView(
                             bookmark: bookmark,
@@ -107,19 +83,28 @@ struct ServicesGridView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 32))
+        VStack(spacing: 10) {
+            Image(systemName: "bookmark")
+                .font(.system(size: 28))
                 .foregroundStyle(Theme.cardBorder)
-            Text("No Services")
+
+            Text("No Bookmarks")
                 .font(.headline)
-            Text("The agent scans for services like Pi-hole, Traefik, and Nginx.\nYou can also add service bookmarks with the + button.")
+
+            Text("Add quick links to your services and dashboards")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+
+            Button { showingAddBookmark = true } label: {
+                Label("Add Bookmark", systemImage: "plus")
+                    .font(.caption)
+            }
+            .buttonStyle(.dark)
+            .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
+        .padding(.vertical, 24)
     }
 }
 
@@ -199,63 +184,5 @@ private struct BookmarkCardView: View {
                 )
         )
         .clipShape(.rect(cornerRadius: 12))
-    }
-}
-
-// MARK: - Refresh Countdown Bar
-
-/// Ticks once per second using TimelineView so both the countdown text
-/// and progress bar update in sync from the wall clock.
-private struct RefreshCountdownBar: View {
-    let lastUpdate: Date?
-    let interval: TimeInterval
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { timeline in
-            let now = timeline.date
-            let elapsed = lastUpdate.map { now.timeIntervalSince($0) } ?? interval
-            let overdue = elapsed >= interval
-            let progress = min(max(elapsed / interval, 0), 1)
-            let remaining = max(Int(ceil(interval - elapsed)), 0)
-
-            VStack(spacing: 4) {
-                HStack {
-                    HStack(spacing: 4) {
-                        if overdue {
-                            ProgressView()
-                                .controlSize(.mini)
-                        } else {
-                            Image(systemName: "arrow.trianglehead.clockwise")
-                                .font(.system(size: 8))
-                        }
-                        Text(overdue ? "Refreshing..." : "Next refresh")
-                            .font(.caption2)
-                    }
-                    .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    if !overdue {
-                        Text("\(remaining)s")
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.tertiary)
-                            .contentTransition(.numericText())
-                    }
-                }
-
-                GeometryReader { geo in
-                    Capsule()
-                        .fill(Color.white.opacity(0.06))
-                        .overlay(alignment: .leading) {
-                            Capsule()
-                                .fill(Theme.accent.opacity(0.4))
-                                .frame(width: geo.size.width * progress)
-                                .animation(.linear(duration: 1), value: progress)
-                        }
-                }
-                .frame(height: 3)
-                .clipShape(Capsule())
-            }
-        }
     }
 }

@@ -8,7 +8,6 @@ struct AgentStatsResponse: Codable, Sendable {
     let system: ServerStats
     let containers: [DockerContainer]
     let processes: [ProcessInfo]?
-    let services: [ServiceInfo]?
 }
 
 // MARK: - Container Actions
@@ -55,7 +54,6 @@ enum ConnectionResult: Sendable {
 enum ServerEvent: Sendable {
     case system(ServerStats, [ProcessInfo])
     case docker([DockerContainer])
-    case services([ServiceInfo])
     case keepalive
 }
 
@@ -261,90 +259,6 @@ final class AgentClient: Sendable {
         return decoded.message ?? "restarting"
     }
 
-    // MARK: - Service Configuration
-
-    /// Send a service password/credential to the agent for a specific plugin.
-    func configureService(host: String, port: Int, token: String, pluginId: String, password: String) async throws -> String {
-        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let url = URL(string: "http://\(trimmedHost):\(port)/services/\(pluginId)/configure") else {
-            throw AgentError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 30
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if !trimmedToken.isEmpty {
-            request.setValue("Bearer \(trimmedToken)", forHTTPHeaderField: "Authorization")
-        }
-
-        let body = ["password": password]
-        request.httpBody = try JSONEncoder().encode(body)
-
-        Self.log.info("POST \(url.absoluteString)")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let http = response as? HTTPURLResponse else {
-            throw AgentError.httpError(0)
-        }
-
-        if http.statusCode == 401 {
-            throw AgentError.unauthorized
-        }
-
-        let decoded = try JSONDecoder().decode(ControlResponse.self, from: data)
-
-        if decoded.error != nil {
-            throw AgentError.httpError(http.statusCode)
-        }
-
-        return decoded.message ?? "configured"
-    }
-
-    /// Perform an action on a detected service plugin.
-    func performServiceAction(host: String, port: Int, token: String, pluginId: String, action: String, params: [String: Any]) async throws -> String {
-        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let url = URL(string: "http://\(trimmedHost):\(port)/services/\(pluginId)/action") else {
-            throw AgentError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 15
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if !trimmedToken.isEmpty {
-            request.setValue("Bearer \(trimmedToken)", forHTTPHeaderField: "Authorization")
-        }
-
-        let body: [String: Any] = ["action": action, "params": params]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        Self.log.info("POST \(url.absoluteString) action=\(action)")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let http = response as? HTTPURLResponse else {
-            throw AgentError.httpError(0)
-        }
-
-        if http.statusCode == 401 {
-            throw AgentError.unauthorized
-        }
-
-        let decoded = try JSONDecoder().decode(ControlResponse.self, from: data)
-
-        if decoded.error != nil {
-            throw AgentError.httpError(http.statusCode)
-        }
-
-        return decoded.message ?? "done"
-    }
-
     // MARK: - SSE Streaming
 
     /// Opens a persistent SSE connection to GET /stats/stream and yields decoded events.
@@ -455,14 +369,6 @@ final class AgentClient: Sendable {
                 return .docker(containers)
             } catch {
                 log.error("SSE decode error (docker): \(error)")
-                return nil
-            }
-        case "services":
-            do {
-                let services = try decoder.decode([ServiceInfo].self, from: jsonData)
-                return .services(services)
-            } catch {
-                log.error("SSE decode error (services): \(error)")
                 return nil
             }
         default:

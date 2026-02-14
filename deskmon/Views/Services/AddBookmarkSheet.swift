@@ -19,7 +19,7 @@ struct AddBookmarkSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(editingBookmark == nil ? "Add Service" : "Edit Service")
+            Text(editingBookmark == nil ? "Add Bookmark" : "Edit Bookmark")
                 .font(.headline)
 
             VStack(alignment: .leading, spacing: 6) {

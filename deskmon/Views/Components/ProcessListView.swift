@@ -7,33 +7,65 @@ struct ProcessListView: View {
 
     @State private var hoveredPID: Int32?
 
-    /// Tracks processes we've seen recently, keyed by PID.
-    /// Prevents rows from flickering in/out when a process hovers
-    /// at the boundary of the agent's top-N list.
-    @State private var knownProcesses: [Int32: (process: ProcessInfo, lastSeen: Date)] = [:]
+    /// Remembers the last stable ordering so rows don't jump on every tick.
+    @State private var displayOrder: [Int32] = []
 
-    private static let gracePeriod: TimeInterval = 10
+    private static let maxVisible = 10
 
+    /// Processes to display — capped at 10, with a stable sort to prevent jitter.
     private var stableProcesses: [ProcessInfo] {
-        let now = Date()
-        let currentByPID = Dictionary(uniqueKeysWithValues: processes.map { ($0.pid, $0) })
+        // Build lookup from the incoming data (already top-N from the agent).
+        let byPID = Dictionary(uniqueKeysWithValues: processes.map { ($0.pid, $0) })
 
-        return knownProcesses.compactMap { pid, entry -> ProcessInfo? in
-            // Use fresh data if still present
-            if let current = currentByPID[pid] { return current }
-            // Keep recently-disappeared processes with stale values
-            if now.timeIntervalSince(entry.lastSeen) < Self.gracePeriod { return entry.process }
-            return nil
+        // Start with the previous ordering, keeping only PIDs still present.
+        var ordered = displayOrder.compactMap { byPID[$0] }
+
+        // Append any new PIDs that weren't in the previous order.
+        let existingPIDs = Set(ordered.map(\.pid))
+        let newProcesses = processes
+            .filter { !existingPIDs.contains($0.pid) }
+            .sorted { score($0) > score($1) }
+        ordered.append(contentsOf: newProcesses)
+
+        // Re-sort only when positions are significantly wrong.
+        // A process needs to outrank its neighbor by >5% combined score
+        // to justify a swap, preventing jitter from tiny fluctuations.
+        ordered = dampedSort(ordered)
+
+        return Array(ordered.prefix(Self.maxVisible))
+    }
+
+    /// Combined resource score for ranking.
+    private func score(_ p: ProcessInfo) -> Double {
+        p.cpuPercent + p.memoryMB * 0.1
+    }
+
+    /// Sort that only swaps adjacent items when the score difference exceeds a threshold.
+    private func dampedSort(_ items: [ProcessInfo]) -> [ProcessInfo] {
+        guard items.count > 1 else { return items }
+        var arr = items
+        // Bubble pass — only swap when the lower-ranked item clearly dominates.
+        var swapped = true
+        while swapped {
+            swapped = false
+            for i in 0..<(arr.count - 1) {
+                let scoreCurrent = score(arr[i])
+                let scoreNext = score(arr[i + 1])
+                // Only swap if the next item's score is meaningfully higher.
+                if scoreNext > scoreCurrent + 5 {
+                    arr.swapAt(i, i + 1)
+                    swapped = true
+                }
+            }
         }
-        .sorted {
-            if abs($0.memoryMB - $1.memoryMB) < 1 { return $0.pid < $1.pid }
-            return $0.memoryMB > $1.memoryMB
-        }
+        return arr
     }
 
     var body: some View {
+        let visible = stableProcesses
+
         VStack(alignment: .leading, spacing: 6) {
-            SectionHeaderView(title: "Top Processes", count: processes.count)
+            SectionHeaderView(title: "Top Processes", count: visible.count)
                 .padding(.horizontal, 4)
 
             VStack(spacing: 0) {
@@ -59,7 +91,7 @@ struct ProcessListView: View {
 
                 Divider().background(Theme.cardBorder)
 
-                ForEach(Array(stableProcesses.enumerated()), id: \.element.pid) { index, process in
+                ForEach(Array(visible.enumerated()), id: \.element.pid) { index, process in
                     let isSelected = selectedPID == process.pid
                     let isHovered = hoveredPID == process.pid
 
@@ -69,27 +101,18 @@ struct ProcessListView: View {
                         .onHover { hoveredPID = $0 ? process.pid : nil }
                         .transition(.opacity.combined(with: .move(edge: .top)))
 
-                    if index < stableProcesses.count - 1 {
+                    if index < visible.count - 1 {
                         Divider()
                             .background(Theme.cardBorder)
                             .padding(.leading, 36)
                     }
                 }
             }
-            .animation(.smooth(duration: 0.3), value: stableProcesses.map(\.pid))
+            .animation(.smooth(duration: 0.3), value: visible.map(\.pid))
             .cardStyle(cornerRadius: 10)
         }
-        .onAppear { mergeProcesses() }
-        .onChange(of: processes.map(\.pid).sorted()) { _, _ in mergeProcesses() }
-    }
-
-    private func mergeProcesses() {
-        let now = Date()
-        for p in processes {
-            knownProcesses[p.pid] = (p, now)
-        }
-        knownProcesses = knownProcesses.filter {
-            now.timeIntervalSince($0.value.lastSeen) < Self.gracePeriod
+        .onChange(of: processes.map(\.pid).sorted()) { _, _ in
+            displayOrder = stableProcesses.map(\.pid)
         }
     }
 

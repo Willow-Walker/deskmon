@@ -142,12 +142,6 @@ final class ServerManager {
                                 server.containers = containers
                             }
 
-                        case .services(let services):
-                            withAnimation(.easeInOut(duration: 0.5)) {
-                                server.services = services
-                            }
-                            server.lastServicesUpdate = Date()
-
                         case .keepalive:
                             break
                         }
@@ -183,7 +177,6 @@ final class ServerManager {
             server.stats = response.system
             server.containers = response.containers
             server.processes = response.processes ?? []
-            server.services = response.services ?? []
             server.appendNetworkSample(response.system.network)
             server.status = Self.deriveStatus(from: response.system)
         }
@@ -262,29 +255,6 @@ final class ServerManager {
             pid: pid
         )
         // Process list will update via the SSE stream automatically
-    }
-
-    func configureService(pluginId: String, password: String) async throws -> String {
-        guard let server = selectedServer else { throw AgentError.invalidURL }
-        return try await client.configureService(
-            host: server.host,
-            port: server.port,
-            token: server.token,
-            pluginId: pluginId,
-            password: password
-        )
-    }
-
-    func performServiceAction(pluginId: String, action: String, params: [String: Any] = [:]) async throws -> String {
-        guard let server = selectedServer else { throw AgentError.invalidURL }
-        return try await client.performServiceAction(
-            host: server.host,
-            port: server.port,
-            token: server.token,
-            pluginId: pluginId,
-            action: action,
-            params: params
-        )
     }
 
     /// Manually fetch latest stats for the selected server (used after actions that change agent state).

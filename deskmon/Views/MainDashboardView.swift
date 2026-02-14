@@ -3,19 +3,11 @@ import SwiftUI
 struct MainDashboardView: View {
     @Environment(ServerManager.self) private var serverManager
     @State private var showingAddServer = false
-    @State private var showingSettings = false
     @State private var editingServer: ServerInfo?
     @State private var selectedContainer: DockerContainer?
     @State private var selectedProcess: ProcessInfo?
-    @State private var activeTab: DashboardTab = .overview
-    @State private var selectedService: ServiceInfo?
     @State private var isRestartingAgent = false
     @State private var restartFeedback: String?
-
-    enum DashboardTab: String, CaseIterable {
-        case overview = "Overview"
-        case services = "Services"
-    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -45,7 +37,14 @@ struct MainDashboardView: View {
                                         serverManager.selectedServerID = server.id
                                         selectedContainer = nil
                                         selectedProcess = nil
-                                        selectedService = nil
+                                    }
+                                }
+                                .contextMenu {
+                                    Button("Edit...") { editingServer = server }
+                                    Button("Delete", role: .destructive) {
+                                        withAnimation(.smooth) {
+                                            serverManager.deleteServer(server)
+                                        }
                                     }
                                 }
                         }
@@ -55,23 +54,8 @@ struct MainDashboardView: View {
 
                 Divider().overlay(Theme.cardBorder)
 
-                // Sidebar footer
-                HStack(spacing: 8) {
-                    Button { showingSettings.toggle() } label: {
-                        Image(systemName: "gear")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .popover(isPresented: $showingSettings) {
-                        settingsPopover
-                            .frame(width: 320, height: 500)
-                    }
-
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                // Sidebar footer — agent status + actions
+                agentFooter
             }
             .frame(width: 220)
             .background(Color.white.opacity(0.04))
@@ -79,32 +63,8 @@ struct MainDashboardView: View {
             // Detail — OLED black with inner rounded border
             VStack(spacing: 0) {
                 if let server = serverManager.selectedServer {
-                    // Tab picker — only show once live
-                    if server.connectionPhase == .live {
-                        HStack {
-                            Picker("", selection: $activeTab) {
-                                ForEach(DashboardTab.allCases, id: \.self) { tab in
-                                    Text(tab.rawValue).tag(tab)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            .frame(width: 200)
-
-                            Spacer()
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 14)
-                        .padding(.bottom, 4)
-                    }
-
-                    // Tab content
-                    switch activeTab {
-                    case .overview:
-                        detailContent(server: server)
-                            .animation(.smooth, value: serverManager.selectedServerID)
-                    case .services:
-                        servicesContent(server: server)
-                    }
+                    detailContent(server: server)
+                        .animation(.smooth, value: serverManager.selectedServerID)
                 } else {
                     Spacer()
                     VStack(spacing: 12) {
@@ -153,6 +113,79 @@ struct MainDashboardView: View {
         .onDisappear {
             NSApp.setActivationPolicy(.accessory)
         }
+    }
+
+    // MARK: - Agent Footer
+
+    private var agentFooter: some View {
+        VStack(spacing: 8) {
+            // Connection status
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(serverManager.isConnected ? Theme.healthy : Theme.warning)
+                    .frame(width: 7, height: 7)
+                    .animation(.smooth, value: serverManager.isConnected)
+
+                Text(serverManager.isConnected ? "Connected" : "Reconnecting...")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                if let restartFeedback {
+                    Text(restartFeedback)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .transition(.opacity)
+                }
+            }
+
+            // Action buttons
+            HStack(spacing: 6) {
+                Button {
+                    serverManager.stopStreaming()
+                    serverManager.startStreaming()
+                } label: {
+                    Label("Reconnect", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button {
+                    isRestartingAgent = true
+                    restartFeedback = nil
+                    Task {
+                        do {
+                            let msg = try await serverManager.restartAgent()
+                            withAnimation { restartFeedback = msg.capitalized }
+                        } catch {
+                            withAnimation { restartFeedback = error.localizedDescription }
+                        }
+                        isRestartingAgent = false
+                        // Clear feedback after a few seconds
+                        try? await Task.sleep(for: .seconds(3))
+                        withAnimation { restartFeedback = nil }
+                    }
+                } label: {
+                    HStack(spacing: 3) {
+                        if isRestartingAgent {
+                            ProgressView()
+                                .controlSize(.mini)
+                        }
+                        Label("Restart Agent", systemImage: "arrow.clockwise")
+                            .font(.caption2)
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .disabled(isRestartingAgent)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
 
     // MARK: - Sidebar Row
@@ -214,7 +247,6 @@ struct MainDashboardView: View {
     private var liveSelectedProcess: ProcessInfo? {
         guard let selected = selectedProcess,
               let server = serverManager.selectedServer else { return nil }
-        // Return live data if still in top list, otherwise keep the stored snapshot
         return server.processes.first { $0.pid == selected.pid } ?? selected
     }
 
@@ -290,6 +322,8 @@ struct MainDashboardView: View {
                             }
                         )
                     }
+
+                    BookmarksSection()
                 }
                 .padding(20)
             }
@@ -303,54 +337,6 @@ struct MainDashboardView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-        }
-    }
-
-    // MARK: - Services Content
-
-    @ViewBuilder
-    private func servicesContent(server: ServerInfo) -> some View {
-        if let service = selectedService,
-           let live = server.services.first(where: { $0.id == service.id }) ?? Optional(service) {
-            VStack(spacing: 0) {
-                HStack {
-                    Button {
-                        withAnimation(.smooth(duration: 0.25)) {
-                            selectedService = nil
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                            Text("Services")
-                        }
-                        .font(.callout)
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
-
-                ServiceDashboardView(service: live)
-            }
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing),
-                removal: .move(edge: .trailing)
-            ))
-        } else {
-            ScrollView {
-                ServicesGridView(services: server.services, lastUpdate: server.lastServicesUpdate) { service in
-                    withAnimation(.smooth(duration: 0.25)) {
-                        selectedService = service
-                    }
-                }
-                .padding(20)
-            }
-            .transition(.asymmetric(
-                insertion: .move(edge: .leading),
-                removal: .move(edge: .leading)
-            ))
         }
     }
 
@@ -397,147 +383,5 @@ struct MainDashboardView: View {
 
     private func networkCard(stats: ServerStats, history: [NetworkSample]) -> some View {
         NetworkStatsView(network: stats.network, history: history)
-    }
-
-    // MARK: - Settings Popover
-
-    private var settingsPopover: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Settings")
-                .font(.headline)
-
-            SectionHeaderView(title: "Servers", count: serverManager.servers.count)
-
-            VStack(spacing: 4) {
-                ForEach(serverManager.servers) { server in
-                    serverPopoverRow(server)
-                }
-            }
-
-            Button {
-                showingSettings = false
-                showingAddServer = true
-            } label: {
-                Label("Add Server", systemImage: "plus")
-                    .font(.callout)
-            }
-            .buttonStyle(.dark)
-
-            Divider().overlay(Theme.cardBorder)
-
-            SectionHeaderView(title: "Agent")
-
-            VStack(spacing: 10) {
-                HStack {
-                    Text("Connection")
-                        .font(.callout)
-                    Spacer()
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(serverManager.isConnected ? Theme.healthy : Theme.warning)
-                            .frame(width: 8, height: 8)
-                        Text(serverManager.isConnected ? "Live" : "Reconnecting...")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                HStack(spacing: 8) {
-                    Button {
-                        isRestartingAgent = true
-                        restartFeedback = nil
-                        Task {
-                            do {
-                                let msg = try await serverManager.restartAgent()
-                                restartFeedback = msg.capitalized
-                            } catch {
-                                restartFeedback = error.localizedDescription
-                            }
-                            isRestartingAgent = false
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            if isRestartingAgent {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                            Label("Restart Agent", systemImage: "arrow.clockwise")
-                                .font(.callout)
-                        }
-                    }
-                    .disabled(isRestartingAgent)
-
-                    Spacer()
-
-                    if let restartFeedback {
-                        Text(restartFeedback)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding(.horizontal, 4)
-
-            Divider().overlay(Theme.cardBorder)
-
-            SectionHeaderView(title: "General")
-
-            VStack(spacing: 2) {
-                settingsPopoverRow("Version", value: "1.0.0")
-            }
-        }
-        .padding(16)
-    }
-
-    private func serverPopoverRow(_ server: ServerInfo) -> some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(server.status.color)
-                .frame(width: 8, height: 8)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(server.name)
-                    .font(.callout.weight(.medium))
-                Text("\(server.host):\(server.port)")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-            }
-
-            Spacer()
-
-            Button {
-                showingSettings = false
-                editingServer = server
-            } label: {
-                Image(systemName: "pencil")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                withAnimation(.smooth) {
-                    serverManager.deleteServer(server)
-                }
-            } label: {
-                Image(systemName: "trash")
-                    .font(.caption)
-                    .foregroundStyle(Theme.critical.opacity(0.7))
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .cardStyle(cornerRadius: 8)
-    }
-
-    private func settingsPopoverRow(_ label: String, value: String) -> some View {
-        HStack {
-            Text(label).font(.callout)
-            Spacer()
-            Text(value).font(.callout.monospacedDigit()).foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
     }
 }
