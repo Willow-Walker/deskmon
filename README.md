@@ -106,19 +106,30 @@ The agent listens on `127.0.0.1:7654` (localhost only). See the [agent repo](htt
 
 **Option A: Download the DMG** (recommended)
 
-Go to the [Actions tab](https://github.com/neur0map/deskmon/actions) on GitHub, click the latest successful build, and download the **Deskmon.dmg** artifact. Open it and drag Deskmon to your Applications folder.
+1. Go to the [Releases page](https://github.com/neur0map/deskmon/releases)
+2. Under the latest release, click **Deskmon.dmg** to download it
+3. Open the DMG and drag **Deskmon** into your **Applications** folder
+4. **First launch:** macOS will block it because it's unsigned. To open it:
+   - Open **System Settings** > **Privacy & Security**
+   - Scroll down — you'll see "Deskmon was blocked"
+   - Click **Open Anyway**, then click **Open** in the popup
+   - This only happens once. After that it opens normally.
 
-> **Gatekeeper warning:** Since the build is unsigned, macOS will block it the first time. Right-click the app > Open > Open to bypass. This only happens once.
+No Xcode, no terminal, no GitHub account needed.
 
 **Option B: Build from source**
 
-```bash
-git clone https://github.com/neur0map/deskmon.git
-cd deskmon
-open deskmon.xcodeproj
-```
+If you prefer to compile it yourself (or want to modify the code):
 
-Change the signing team to your Apple ID, then build and run (Cmd+R). Requires Xcode 16+.
+1. Install [Xcode](https://apps.apple.com/app/xcode/id497799835) from the App Store (free, ~12 GB)
+2. Run these commands in Terminal:
+   ```bash
+   git clone https://github.com/neur0map/deskmon.git
+   cd deskmon
+   open deskmon.xcodeproj
+   ```
+3. In Xcode, go to the project settings and change the **Signing Team** to your Apple ID
+4. Press **Cmd+R** to build and run
 
 ### 3. Add your server
 
