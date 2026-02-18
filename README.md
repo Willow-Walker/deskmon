@@ -10,7 +10,9 @@ A native macOS menu bar app for monitoring home servers. No browser tabs, no Gra
 ![Swift](https://img.shields.io/badge/Swift-6%2B-orange)
 ![Agent](https://img.shields.io/badge/agent-Go-00ADD8)
 
-<!-- Add screenshots here: ![Screenshot](docs/screenshots/dashboard.png) -->
+| Menu Bar | Dashboard |
+|----------|-----------|
+| ![Menu Bar](deskmon/Assets.xcassets/deskmon-menubar.png) | ![Dashboard](deskmon/Assets.xcassets/deskmon-dashboard.png) |
 
 ---
 
