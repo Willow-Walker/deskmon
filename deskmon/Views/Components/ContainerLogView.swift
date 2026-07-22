@@ -122,9 +122,15 @@ struct ContainerLogView: View {
 
     private func fetchLogs() async {
         isLoading = true
+        let safeID = container.id.filter(\.isHexDigit)
+        guard !safeID.isEmpty else {
+            loadError = "Invalid container ID"
+            isLoading = false
+            return
+        }
         do {
             let output = try await serverManager.executeCommand(
-                "docker logs --tail 100 \(container.id) 2>&1"
+                "docker logs --tail 100 \(safeID) 2>&1"
             )
             loadError = nil
             logs = output

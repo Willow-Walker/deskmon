@@ -83,10 +83,25 @@ struct N8nClient {
     }
 
     func fetchWorkflows() async throws -> [N8nWorkflow] {
-        let req = try makeRequest(path: "/api/v1/workflows?limit=25")
-        let (data, response) = try await URLSession.shared.data(for: req)
-        if let http = response as? HTTPURLResponse { try checkStatus(http) }
-        let all = try JSONDecoder().decode(N8nListResponse<N8nWorkflow>.self, from: data).data
+        var all: [N8nWorkflow] = []
+        var cursor: String?
+
+        repeat {
+            var path = "/api/v1/workflows?limit=100"
+            if let cursor {
+                let encoded = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor
+                path += "&cursor=\(encoded)"
+            }
+
+            let req = try makeRequest(path: path)
+            let (data, response) = try await URLSession.shared.data(for: req)
+            if let http = response as? HTTPURLResponse { try checkStatus(http) }
+
+            let page = try JSONDecoder().decode(N8nListResponse<N8nWorkflow>.self, from: data)
+            all.append(contentsOf: page.data)
+            cursor = page.nextCursor
+        } while cursor != nil
+
         return all.filter { $0.isArchived != true }
     }
 

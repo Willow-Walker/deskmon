@@ -137,9 +137,10 @@ final class SSHManager {
     /// Open (or reuse) an additional SSH tunnel to `remotePort` on the remote host.
     /// Returns the local base URL, e.g. `"http://127.0.0.1:54321"`.
     func openExtraTunnel(remotePort: Int) async throws -> String {
-        if let existing = extraTunnels[remotePort] {
+        if let existing = extraTunnels[remotePort], existing.channel.isActive {
             return "http://127.0.0.1:\(existing.localPort)"
         }
+        extraTunnels.removeValue(forKey: remotePort)
 
         guard let client = sshClient, client.isConnected else {
             throw SSHTunnelError.notConnected
@@ -162,6 +163,13 @@ final class SSHManager {
         guard let port = serverChannel.localAddress?.port else {
             try await serverChannel.close().get()
             throw SSHTunnelError.bindFailed
+        }
+
+        // Another concurrent call may have opened a tunnel for the same port while
+        // this one awaited the bind above — dedupe so we don't leak a listener.
+        if let existing = extraTunnels[remotePort], existing.channel.isActive {
+            try? await serverChannel.close().get()
+            return "http://127.0.0.1:\(existing.localPort)"
         }
 
         extraTunnels[remotePort] = (channel: serverChannel, localPort: port)
@@ -226,6 +234,9 @@ final class SSHManager {
                 Self.log.warning("SSH connection dropped")
                 self.localServer = nil
                 self.tunnelPort = 0
+                for (_, tunnel) in self.extraTunnels {
+                    tunnel.channel.close(promise: nil)
+                }
                 self.extraTunnels.removeAll()
                 self.sshClient = nil
                 self.phase = .disconnected

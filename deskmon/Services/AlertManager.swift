@@ -239,6 +239,16 @@ final class AlertManager {
             }
         }
 
+        // Clean up sustained/cooldown tracking for containers that disappeared from the snapshot
+        // (e.g. removed via docker-compose down) so stale timers can't linger indefinitely.
+        let removedContainerIDs = Set(previous.keys).subtracting(containers.map(\.id))
+        for removedID in removedContainerIDs {
+            firstBreachTime.removeValue(forKey: "\(id)-ccpu-\(removedID)")
+            firstBreachTime.removeValue(forKey: "\(id)-cmem-\(removedID)")
+            lastFired.removeValue(forKey: "\(id)-ccpu-\(removedID)")
+            lastFired.removeValue(forKey: "\(id)-cmem-\(removedID)")
+        }
+
         // Update previous state
         previousContainerStates[id] = Dictionary(
             uniqueKeysWithValues: containers.map { ($0.id, $0.status.rawValue) }
@@ -246,10 +256,10 @@ final class AlertManager {
 
         // Container CPU
         if cfg.containerCPUEnabled {
-            for c in containers where c.status == .running {
+            for c in containers {
                 evaluateSustained(
                     key: "\(id)-ccpu-\(c.id)",
-                    breached: c.cpuPercent > cfg.containerCPUThreshold,
+                    breached: c.status == .running && c.cpuPercent > cfg.containerCPUThreshold,
                     sustainedSeconds: cfg.containerCPUSustained,
                     serverName: serverName,
                     title: "Container CPU",
@@ -261,10 +271,10 @@ final class AlertManager {
 
         // Container memory
         if cfg.containerMemoryEnabled {
-            for c in containers where c.status == .running {
+            for c in containers {
                 evaluateSustained(
                     key: "\(id)-cmem-\(c.id)",
-                    breached: c.memoryPercent > cfg.containerMemoryThreshold,
+                    breached: c.status == .running && c.memoryPercent > cfg.containerMemoryThreshold,
                     sustainedSeconds: cfg.containerMemorySustained,
                     serverName: serverName,
                     title: "Container Memory",
@@ -430,26 +440,35 @@ final class AlertManager {
         Self.log.info("Alert fired: \(serverName) — \(title): \(body)")
     }
 
-    private static func fireSlack(webhookURL: String, serverName: String, title: String, body: String) async {
-        guard let url = URL(string: webhookURL) else { return }
-        let payload = ["text": "*\(serverName)* — \(title)\n\(body)"]
-        guard let data = try? JSONEncoder().encode(payload) else { return }
+    private static func postWebhook(url: URL, body data: Data, channel: String) async {
         var req = URLRequest(url: url, timeoutInterval: 10)
         req.httpMethod = "POST"
         req.httpBody = data
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        try? await URLSession.shared.data(for: req)
+        do {
+            let (_, response) = try await URLSession.shared.data(for: req)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                Self.log.error("\(channel) webhook failed with status \(code)")
+                return
+            }
+        } catch {
+            Self.log.error("\(channel) webhook request failed: \(error.localizedDescription)")
+        }
+    }
+
+    private static func fireSlack(webhookURL: String, serverName: String, title: String, body: String) async {
+        guard let url = URL(string: webhookURL) else { return }
+        let payload = ["text": "*\(serverName)* — \(title)\n\(body)"]
+        guard let data = try? JSONEncoder().encode(payload) else { return }
+        await postWebhook(url: url, body: data, channel: "Slack")
     }
 
     private static func fireDiscord(webhookURL: String, serverName: String, title: String, body: String) async {
         guard let url = URL(string: webhookURL) else { return }
         let payload = ["content": "**\(serverName)** — \(title)\n\(body)"]
         guard let data = try? JSONEncoder().encode(payload) else { return }
-        var req = URLRequest(url: url, timeoutInterval: 10)
-        req.httpMethod = "POST"
-        req.httpBody = data
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        try? await URLSession.shared.data(for: req)
+        await postWebhook(url: url, body: data, channel: "Discord")
     }
 
     private static func fireGenericWebhook(webhookURL: String, serverName: String, title: String, body: String) async {
@@ -463,11 +482,7 @@ final class AlertManager {
         let payload = Payload(serverName: serverName, title: title, body: body,
                               timestamp: ISO8601DateFormatter().string(from: Date()))
         guard let data = try? JSONEncoder().encode(payload) else { return }
-        var req = URLRequest(url: url, timeoutInterval: 10)
-        req.httpMethod = "POST"
-        req.httpBody = data
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        try? await URLSession.shared.data(for: req)
+        await postWebhook(url: url, body: data, channel: "Generic webhook")
     }
 
     // MARK: - Persistence

@@ -105,9 +105,11 @@ struct AddServerSheet: View {
             guard case .success(let urls) = result, let url = urls.first else { return }
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            if let data = try? Data(contentsOf: url) {
-                keyFileData = data
+            do {
+                keyFileData = try Data(contentsOf: url)
                 keyFileName = url.lastPathComponent
+            } catch {
+                errorMessage = "Could not read key file: \(error.localizedDescription)"
             }
         }
     }
@@ -144,6 +146,17 @@ struct AddServerSheet: View {
         let trimmedUsername = username.trimmingCharacters(in: .whitespaces)
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
 
+        // Validate the key/passphrase before creating a server entry, so a wrong
+        // passphrase doesn't repeatedly add-then-delete servers on retry.
+        if useKeyAuth, let data = keyFileData {
+            do {
+                _ = try SSHKeyGenerator.parsePrivateKey(from: data, passphrase: passphrase.isEmpty ? nil : passphrase)
+            } catch {
+                errorMessage = Self.friendlyError(error)
+                return
+            }
+        }
+
         let server = serverManager.addServer(
             name: trimmedName,
             host: trimmedHost,
@@ -177,7 +190,7 @@ struct AddServerSheet: View {
         if msg.contains("IOError") && msg.contains("error 60") {
             return "Connection timed out — host may be unreachable"
         }
-        if msg.contains("error 4") {
+        if msg.range(of: #"\berror 4\b"#, options: .regularExpression) != nil {
             return "SSH key not authorized — verify the key is in ~/.ssh/authorized_keys on the server"
         }
         return msg

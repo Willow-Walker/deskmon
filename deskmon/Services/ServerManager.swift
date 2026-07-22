@@ -155,6 +155,10 @@ final class ServerManager {
         let response = try await client.fetchStats(baseURL: url)
         applyFullSnapshot(server: server, response: response)
 
+        // Store the user-supplied key so reconnect has a fallback credential even if
+        // the background app-key install below never completes (e.g. read-only home dir).
+        try? KeychainStore.savePrivateKey(Data(privateKey.rawRepresentation), for: server.id)
+
         // Wire disconnect handler
         ssh.onDisconnect { [weak self] in
             Task { @MainActor [weak self] in
@@ -180,9 +184,9 @@ final class ServerManager {
             server.connectionPhase = .sshConnecting
         }
 
-        // Try key auth first
-        if server.hasKeyInstalled,
-           let keyData = KeychainStore.loadPrivateKey(for: server.id),
+        // Try key auth first — a stored key may come from either the app-installed
+        // key or the user's own key persisted at connect time (see connectServer(keyData:)).
+        if let keyData = KeychainStore.loadPrivateKey(for: server.id),
            let privateKey = try? SSHKeyGenerator.privateKey(from: keyData) {
             do {
                 try await ssh.connect(
@@ -610,7 +614,7 @@ final class ServerManager {
                     if case .firing(let message) = result {
                         await MainActor.run {
                             alertManager.firePluginAlert(
-                                key: "plugin-\(sid)-\(container.id)-\(metric.key)",
+                                key: "plugin-\(sid)-\(container.name)-\(metric.key)",
                                 serverName: sname,
                                 title: metric.displayName,
                                 body: message,
