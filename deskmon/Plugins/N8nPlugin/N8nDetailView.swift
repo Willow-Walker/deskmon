@@ -28,6 +28,7 @@ struct N8nDetailView: View {
     @State private var isTriggering = false
     @State private var triggerMessage: String?
     @State private var showingTriggerInfo = false
+    @State private var webhookLookupToken = UUID()
 
     private let n8nPort = 5678
 
@@ -339,7 +340,9 @@ struct N8nDetailView: View {
             webhookInfo = nil
             triggerMessage = nil
             guard let id = newID else { return }
-            Task { await loadWebhookInfo(for: id, client: c) }
+            let token = UUID()
+            webhookLookupToken = token
+            Task { await loadWebhookInfo(for: id, client: c, token: token) }
         }
     }
 
@@ -410,10 +413,16 @@ struct N8nDetailView: View {
         }
     }
 
-    private func loadWebhookInfo(for workflowID: String, client c: N8nClient) async {
+    private func loadWebhookInfo(for workflowID: String, client c: N8nClient, token: UUID) async {
         isLoadingWebhookInfo = true
-        defer { isLoadingWebhookInfo = false }
-        webhookInfo = try? await c.fetchWebhookInfo(workflowID: workflowID)
+        defer {
+            if webhookLookupToken == token {
+                isLoadingWebhookInfo = false
+            }
+        }
+        let info = try? await c.fetchWebhookInfo(workflowID: workflowID)
+        guard webhookLookupToken == token else { return }
+        webhookInfo = info
     }
 
     private func triggerWorkflow(with c: N8nClient) async {

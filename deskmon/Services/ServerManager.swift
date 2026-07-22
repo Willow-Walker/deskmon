@@ -132,8 +132,12 @@ final class ServerManager {
 
         server.connectionPhase = .sshConnecting
 
-        // Parse the OpenSSH private key from file data (handles encrypted keys via passphrase)
-        let privateKey = try SSHKeyGenerator.parsePrivateKey(from: keyData, passphrase: passphrase)
+        // Parse the OpenSSH private key from file data (handles encrypted keys via passphrase).
+        // Runs off the main actor since passphrase-protected keys run a bcrypt KDF that can
+        // take noticeable time and would otherwise block the UI.
+        let privateKey = try await Task.detached(priority: .userInitiated) {
+            try SSHKeyGenerator.parsePrivateKey(from: keyData, passphrase: passphrase)
+        }.value
 
         // SSH connect with key
         try await ssh.connect(

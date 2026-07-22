@@ -147,10 +147,14 @@ struct AddServerSheet: View {
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
 
         // Validate the key/passphrase before creating a server entry, so a wrong
-        // passphrase doesn't repeatedly add-then-delete servers on retry.
+        // passphrase doesn't repeatedly add-then-delete servers on retry. Runs off the
+        // main actor since passphrase-protected keys run a bcrypt KDF that can be slow.
         if useKeyAuth, let data = keyFileData {
+            let trimmedPassphrase = passphrase.isEmpty ? nil : passphrase
             do {
-                _ = try SSHKeyGenerator.parsePrivateKey(from: data, passphrase: passphrase.isEmpty ? nil : passphrase)
+                _ = try await Task.detached(priority: .userInitiated) {
+                    try SSHKeyGenerator.parsePrivateKey(from: data, passphrase: trimmedPassphrase)
+                }.value
             } catch {
                 errorMessage = Self.friendlyError(error)
                 return

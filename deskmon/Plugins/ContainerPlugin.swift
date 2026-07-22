@@ -40,7 +40,10 @@ struct PluginAlertContext {
 /// To add a new plugin:
 /// 1. Create a type conforming to `ContainerPlugin`
 /// 2. Register it at startup: `PluginRegistry.shared.register(MyPlugin())`
-@MainActor
+///
+/// Only `makeDetailView` is main-actor isolated — `evaluateAlert` runs on ServerManager's
+/// 60s background polling loop and typically does network I/O, so it must stay off the
+/// main actor to avoid blocking the UI during polling.
 protocol ContainerPlugin {
     /// Unique stable identifier, e.g. `"n8n"`.
     var id: String { get }
@@ -51,6 +54,7 @@ protocol ContainerPlugin {
     func matches(imageName: String) -> Bool
 
     /// Build the SwiftUI view rendered below the standard container stats in the detail panel.
+    @MainActor
     func makeDetailView(context: PluginContext) -> AnyView
 
     /// Alertable metrics this plugin can evaluate.
