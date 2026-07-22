@@ -1,0 +1,8 @@
+// Copy this file to DeveloperSettings.xcconfig (already gitignored) and fill in
+// your own Apple Developer Team ID so Xcode can sign local builds without
+// touching project.pbxproj (and without committing your Team ID for others).
+//
+// Find your Team ID in Xcode → Settings → Accounts → (your Apple ID) → team,
+// or via: security find-identity -v -p codesigning
+
+DEVELOPMENT_TEAM = YOUR_TEAM_ID

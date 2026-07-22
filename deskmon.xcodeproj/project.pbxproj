@@ -11,12 +11,16 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		11091AE30058AFBB58A482C6 /* DeveloperSettings.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = DeveloperSettings.xcconfig; sourceTree = "<group>"; };
 		9439A9552F3ACDD5007971C0 /* deskmon.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = deskmon.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BBDF7A61967377CD7CB39ABB /* DeveloperSettings.xcconfig.example */ = {isa = PBXFileReference; includeInIndex = 1; path = DeveloperSettings.xcconfig.example; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		9439A9572F3ACDD5007971C0 /* deskmon */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = deskmon;
 			sourceTree = "<group>";
 		};
@@ -34,11 +38,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		33AA985BB1989C022628CDB0 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				11091AE30058AFBB58A482C6 /* DeveloperSettings.xcconfig */,
+				BBDF7A61967377CD7CB39ABB /* DeveloperSettings.xcconfig.example */,
+			);
+			name = Config;
+			path = Config;
+			sourceTree = "<group>";
+		};
 		9439A94C2F3ACDD5007971C0 = {
 			isa = PBXGroup;
 			children = (
 				9439A9572F3ACDD5007971C0 /* deskmon */,
 				9439A9562F3ACDD5007971C0 /* Products */,
+				33AA985BB1989C022628CDB0 /* Config */,
 			);
 			sourceTree = "<group>";
 		};
@@ -256,6 +271,7 @@
 		};
 		9439A9632F3ACDD6007971C0 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 11091AE30058AFBB58A482C6 /* DeveloperSettings.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -264,7 +280,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Z378QR3XNZ;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -294,6 +309,7 @@
 		};
 		9439A9642F3ACDD6007971C0 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 11091AE30058AFBB58A482C6 /* DeveloperSettings.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -302,7 +318,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Z378QR3XNZ;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;

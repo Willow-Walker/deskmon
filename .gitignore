@@ -39,4 +39,13 @@ coverage.html
 
 # Release builds
 /releases/
-\n# Xcode\nxcuserdata/\n*.xcuserstate
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+
+# xcode-build-server (machine-specific paths)
+buildServer.json
+
+# Local signing team override (see Config/DeveloperSettings.xcconfig.example)
+/Config/DeveloperSettings.xcconfig
